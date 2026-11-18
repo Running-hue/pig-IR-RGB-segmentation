@@ -2,6 +2,12 @@
 .model-deps/
 .models/
 .state/
+.venv/
+venv/
+.DS_Store
+*.pt
+*.pth
+*.part
 __pycache__/
 *.pyc
 tests/artifacts/

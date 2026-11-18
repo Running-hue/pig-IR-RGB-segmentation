@@ -1,6 +1,9 @@
 #!/bin/zsh
 cd "$(dirname "$0")" || exit 1
-task_python="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3"
+task_python="$PWD/.venv/bin/python"
+if [[ ! -x "$task_python" ]]; then
+  task_python="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3"
+fi
 if [[ ! -x "$task_python" ]]; then
   task_python="$(command -v python3)"
 fi
