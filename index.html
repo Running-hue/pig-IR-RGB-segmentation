@@ -17,8 +17,55 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 @media(min-width:821px) and (max-height:800px){header{min-height:76px;padding:10px 16px}.right{padding:10px;gap:8px}.reviewSection{gap:5px}.preview img{height:60px}.right textarea{height:40px;min-height:40px}.right button,.right select{padding:6px 8px}.saveGroup{padding-top:7px}}
 @media(max-width:1200px){header>.headerActions{gap:6px}header button,#csvExport{font-size:12px;padding:7px 8px}#counts{font-size:11px}.shell{grid-template-columns:190px minmax(350px,1fr) 265px}}
 @media(max-width:820px){header{flex-wrap:wrap}header>.headerIdentity{flex-basis:100%}header>.headerActions{flex-shrink:1;justify-content:flex-start}.right{overflow:visible}.preview img{height:100px}.right textarea{resize:vertical}.saveGroup{margin-top:10px}}
+
+/* Keep review controls compact so the image and save actions fit on a laptop. */
+.editorControls{display:flex;flex-direction:column;gap:12px;flex-shrink:0;min-width:0}
+@media(min-width:821px){
+  header{min-height:60px;padding:8px 14px;gap:12px}
+  h1{font-size:17px;margin-bottom:3px}
+  header button,header #csvExport{padding:6px 8px;font-size:13px}
+  header .headerActions{gap:6px}
+  main{padding:8px 10px;gap:5px}
+  .editorControls{gap:4px}
+  .editorControls .caption{min-height:28px;gap:6px}
+  .frameIdentity{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1}
+  #title{font-size:15px;white-space:nowrap;flex-shrink:0}
+  #capture{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .frameNavigation{display:flex;align-items:center;gap:4px;flex-shrink:0}
+  #reviewInputMode{font-size:11px;white-space:nowrap}
+  .editorControls button,.editorControls select{font-size:13px;line-height:18px;padding:4px 7px;min-height:28px;white-space:nowrap}
+  .editorControls .toolbar{gap:4px}
+  .editorControls .inline{gap:4px;white-space:nowrap}
+  .editorControls input[type=range]{padding:0;cursor:pointer}
+  #samTools strong{font-size:13px;white-space:nowrap}
+  #samPromptCount{font-size:11px;line-height:1.4}
+  #brush{width:66px}
+  #opacity{width:54px}
+  #geometryNote{font-size:11px;line-height:1.4;flex-shrink:0}
+  #message{min-height:17px;line-height:17px;flex-shrink:0}
+  .right{padding:8px 10px;gap:6px}
+  .reviewSection{gap:4px}
+  .reviewHelp,.reviewWarnings{line-height:1.4}
+  .preview img{height:clamp(38px,8dvh,64px)}
+  .preview small{font-size:11px;line-height:1.3}
+  .right button,.right select{font-size:13px;line-height:18px;padding:4px 7px;min-height:28px}
+  .preview button{padding:3px}
+  .right label{gap:3px}
+  .headField select{width:124px}
+  .right textarea{height:34px;min-height:34px;padding:5px 7px;font-size:12px}
+  #stats{gap:2px 6px;line-height:1.4}
+  .decisionButtons,.restoreActions{gap:4px}
+  .decisionHelp,.saveGroup small{line-height:1.35}
+  .saveGroup{padding-top:6px;gap:4px}
+}
+@media(min-width:821px) and (max-height:650px){
+  header{min-height:56px;padding-top:6px;padding-bottom:6px}
+  .right{gap:5px}
+  .preview img{height:48px}
+  .reviewSection{gap:3px}
+}
 </style>
-<header><div class="headerIdentity"><h1>猪体分割与复核</h1><div id="source" class="muted path">选择原始目录开始分割，或打开已有成果</div></div><div class="headerActions"><button id="newBatch">新建分割任务</button><button id="openResults">打开成果目录</button><button id="reviewCurrent" hidden>查看当前成果</button><button id="exportOpen" hidden>导出筛选成果</button><a id="csvExport" download="分割成果筛选记录.csv" hidden>下载筛选记录 CSV</a><div id="counts" class="muted"></div></div></header>
+<header><div class="headerIdentity"><h1>猪体分割与复核</h1><div id="source" class="muted path">选择原始目录开始分割，或打开已有成果</div></div><div class="headerActions"><button id="newBatch">新建分割任务</button><button id="openResults">打开成果目录</button><button id="reviewCurrent" hidden>查看当前成果</button><button id="jobDetails" hidden>分割记录</button><button id="exportOpen" hidden>导出筛选成果</button><a id="csvExport" download="分割成果筛选记录.csv" hidden>下载筛选记录 CSV</a><div id="counts" class="muted"></div></div></header>
 <section id="workflow">
 <div id="currentDataset" hidden></div>
 <div id="newBatchForm"><h2>从原始数据开始分割</h2><small>选择 iToF 原始目录和成果保存位置。模型在本机运行，完成后进入成果复核。</small>
@@ -41,10 +88,12 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 <div class="shell" id="editor" hidden>
 <aside class="left"><input id="search" placeholder="搜索耳标或拍摄时间" aria-label="搜索采集"><select id="filter" aria-label="筛选状态"><option value="all">全部采集</option><option value="decision:pending">未筛选</option><option value="decision:keep">已保留</option><option value="decision:reject">已淘汰</option><option value="decision:unsure">待定</option><option value="draft">待复核初稿</option><option value="corrected">已修正，待确认</option><option value="reviewed">已确认合格</option><option value="pending">未生成</option></select><div id="list"></div><small>筛选记录保存在当前成果目录；原始数据只读。</small></aside>
 <main>
-<div class="caption"><div><div id="title">选择一张底图</div><small id="capture"></small></div><div><small id="reviewInputMode"></small> <button id="prev">上一张</button> <button id="next">下一张</button></div></div>
+<div class="editorControls">
+<div class="caption"><div class="frameIdentity"><div id="title">选择一张底图</div><small id="capture"></small></div><div class="frameNavigation"><small id="reviewInputMode"></small> <button id="prev">上一张</button> <button id="next">下一张</button></div></div>
 <div class="toolbar" id="tools"><button data-tool="brush" class="active">补画 B</button><button data-tool="erase">擦除 E</button><button data-tool="polyAdd">多边形补画</button><button data-tool="polyErase">多边形擦除</button><button id="finishPoly">闭合轮廓 ↵</button><button id="undo">撤销</button><button id="redo">重做</button></div>
 <div class="toolbar" id="samTools"><strong>SAM 2.1</strong><button data-tool="samPositive">目标点 ＋</button><button data-tool="samNegative">背景点 −</button><button data-tool="samBox">框选目标</button><button id="samPredict" class="primary">运行 SAM</button><button id="samClear">清空提示</button><small id="samPromptCount">先在猪体内部点一下</small></div>
-<div class="toolbar"><button data-view="overlay" class="active">叠加预览</button><button data-view="original">红外原图</button><button data-view="binary">二值掩码</button><label class="inline">笔刷 <input id="brush" type="range" min="2" max="90" value="20" aria-label="笔刷直径"><span id="brushLabel">20</span></label><label class="inline">叠加 <input id="opacity" type="range" min="5" max="85" value="40" aria-label="叠加透明度"></label><select id="zoom" aria-label="画布缩放"><option value="fit">适应窗口</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></div>
+<div class="toolbar viewTools"><button data-view="overlay" class="active">叠加预览</button><button data-view="original">红外原图</button><button data-view="binary">二值掩码</button><label class="inline">笔刷 <input id="brush" type="range" min="2" max="90" value="20" aria-label="笔刷直径"><span id="brushLabel">20</span></label><label class="inline">叠加 <input id="opacity" type="range" min="5" max="85" value="40" aria-label="叠加透明度"></label><select id="zoom" aria-label="画布缩放"><option value="fit">适应窗口</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></div>
+</div>
 <div id="viewport"><div id="stage"><canvas id="base" width="640" height="576"></canvas><canvas id="paint" width="640" height="576"></canvas><canvas id="mask" width="640" height="576"></canvas></div></div>
 <small id="geometryNote" role="status"></small>
 <div id="message" role="status">鼠标拖动补画或擦除；多边形点击添加顶点，回车闭合，Esc 取消。</div>

@@ -1,6 +1,7 @@
 // Folder selection, background jobs and result decisions for the local editor.
 let workspaceData=null;
 let currentJob=null;
+let dismissedJobId=sessionStorage.getItem('dismissedBatchJobId');
 let directoryTarget=null;
 let currentDirectory=null;
 let polling=false;
@@ -21,6 +22,11 @@ function setMode(mode){
   $('currentDataset').hidden=!workspaceData?.output;
   $('flowClose').hidden=!workspaceData?.output;
   $('flowOpenResults').disabled=!workspaceData?.output;
+  if(mode==='review'&&currentJob&&!state.jobActive){
+    dismissedJobId=currentJob.id;
+    sessionStorage.setItem('dismissedBatchJobId',dismissedJobId);
+    showJob(currentJob);
+  }
   if(mode!=='review')flowMessage('');
   requestAnimationFrame(fit);
 }
@@ -71,7 +77,9 @@ async function adoptWorkspace(data,{loadFirst=true}={}){
 function showJob(job){
   currentJob=job;state.jobActive=!!jobRunning(job);
   const completedCleanly=job?.status==='completed'&&!job.failed&&!job.error&&!job.errors?.length;
-  $('jobPanel').hidden=!job||completedCleanly;
+  const dismissed=!!job?.id&&job.id===dismissedJobId&&!state.jobActive;
+  $('jobPanel').hidden=!job||completedCleanly||dismissed;
+  $('jobDetails').hidden=!job||completedCleanly||state.jobActive||!$('jobPanel').hidden;
   if(job){
     const label={running:'正在分割',stopping:'正在停止',completed:'分割完成',stopped:'已停止',failed:'任务失败',interrupted:'任务中断'}[job.status]||job.status;
     $('jobText').textContent=`${label} · ${job.done} / ${job.total} · 成功 ${job.success} · 失败 ${job.failed}　${job.current||''}`;
@@ -134,6 +142,12 @@ $('chooseExportParent').onclick=()=>chooseDirectory('exportParent','选择筛选
 $('newBatch').onclick=()=>{if(!$('batchName').value)$('batchName').value=newFolderName();setMode('new')};
 $('openResults').onclick=()=>setMode('open');
 $('reviewCurrent').onclick=()=>setMode('review');
+$('jobDetails').onclick=()=>{
+  dismissedJobId=null;
+  sessionStorage.removeItem('dismissedBatchJobId');
+  showJob(currentJob);
+  requestAnimationFrame(fit);
+};
 $('flowClose').onclick=()=>setMode('review');$('flowOpenResults').onclick=()=>setMode('review');
 $('batchSource').oninput=()=>{$('scanResult').textContent=''};
 $('batchInputMode').onchange=()=>{$('scanResult').textContent='';batchInputHint();if(!$('batchName').value||/^itof_SAM2_(IR_|RGB_)?\d{8}_\d{6}$/.test($('batchName').value))$('batchName').value=newFolderName()};
@@ -159,7 +173,7 @@ $('loadResults').onclick=async()=>{
 };
 $('stopBatch').onclick=async()=>{try{const d=await api('/api/batch/stop',{job_id:currentJob.id});showJob(d.job)}catch(e){message(e.message,true)}};
 $('enterReview').onclick=async()=>{
-  try{const d=await api('/api/captures');await adoptWorkspace(d);$('workflow').hidden=true;message('成果已载入；可以保留、淘汰、待定，或修正掩码。')}
+  try{const d=await api('/api/captures');await adoptWorkspace(d);setMode('review');message('成果已载入；可以保留、淘汰、待定，或修正掩码。')}
   catch(e){message(e.message,true)}
 };
 async function decideResult(decision){
