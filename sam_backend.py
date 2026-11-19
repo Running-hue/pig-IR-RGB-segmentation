@@ -56,7 +56,9 @@ class SAMPredictor:
         points = np.asarray(prompts.get('points',[]),dtype=np.float32)
         labels = np.asarray(prompts.get('labels',[]),dtype=np.int32)
         box = prompts.get('box')
-        h,w = gray.shape
+        if gray.dtype != np.uint8 or not (gray.ndim == 2 or (gray.ndim == 3 and gray.shape[2] == 3)):
+            raise ValueError('SAM 输入必须是 uint8 灰度图或三通道 RGB 图')
+        h,w = gray.shape[:2]
         if len(points):
             if points.ndim != 2 or points.shape[1] != 2 or labels.shape != (len(points),):
                 raise ValueError('点提示必须是坐标和对应的前景／背景标签')
@@ -73,7 +75,7 @@ class SAMPredictor:
         start = time.perf_counter()
         with self.lock, self.torch.inference_mode():
             if key is None or key != self.current:
-                self.predictor.set_image(np.repeat(gray[...,None],3,axis=2))
+                self.predictor.set_image(np.repeat(gray[...,None],3,axis=2) if gray.ndim == 2 else gray)
                 self.current = key
             masks,scores,_ = self.predictor.predict(
                 point_coords=points if len(points) else None,

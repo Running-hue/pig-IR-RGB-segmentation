@@ -15,20 +15,35 @@ import webbrowser
 
 from core import (Image, np, atomic_bytes, atomic_json, discover, input_fingerprint,
                   mask_stats, overlay, png_bytes, read_frame, stamp, validate_output,
-                  write_draft)
+                  write_draft, read_input, input_mode)
 
 APP_DIR = Path(__file__).resolve().parent
 
+from geometry import (prepare_frame, write_geometry, validate_mask_region, RGB_VERSION, RGB_LEGACY)
+
 
 class Dataset:
-    def __init__(self, source, output, rows=None):
+    def __init__(self, source, output, rows=None, mode=None):
         self.source, self.output = validate_output(source, output)
-        self.rows = discover(self.source) if rows is None else rows
+        manifest=self.output/'dataset.json'
+        saved=json.loads(manifest.read_text()) if manifest.is_file() else {}
+        self.input_mode=input_mode(saved.get('input_mode','infrared') if mode is None else mode)
+        self.geometry_version=saved.get('geometry_version',RGB_LEGACY if self.input_mode=='rgb' else None)
+        if self.input_mode=='rgb' and self.geometry_version not in {RGB_VERSION,RGB_LEGACY}:
+            raise ValueError('未知的 RGB 成果几何版本，不能直接打开')
+        self.rows = discover(self.source,self.input_mode) if rows is None else rows
         self.by_id = {r['id']: r for r in self.rows}
         self.dataset_id = secrets.token_urlsafe(16)
         self.lock = threading.RLock()
         self.sam = None
         self.sam_predictions = {}
+
+    def frame_input(self,row):
+        return prepare_frame(row['source_dir'],self.input_mode,self.geometry_version)
+
+    def editable_geometry(self):
+        if self.input_mode=='rgb' and self.geometry_version==RGB_LEGACY:
+            raise ValueError('旧 RGB 成果未做几何校正，仅供查看和筛选；请新建 RGB 分割任务，不可在旧掩码上切换去畸变底图')
 
     def row(self, frame_id):
         if frame_id not in self.by_id:
@@ -44,8 +59,11 @@ class Dataset:
     def metadata(self, row):
         p = self.dest(row)/'segmentation.json'
         if p.exists():
-            return json.loads(p.read_text())
-        return {**row, 'status': 'pending', 'reviewed': False, 'revision': 0, 'stats': {}}
+            meta=json.loads(p.read_text())
+            if input_mode(meta.get('input_mode','infrared'))!=self.input_mode:
+                raise ValueError('帧的分割输入与成果目录模式不一致，请核查成果文件')
+            return {**meta,'input_mode':self.input_mode}
+        return {**row, 'input_mode':self.input_mode,'status': 'pending', 'reviewed': False, 'revision': 0, 'stats': {}}
 
     def listing(self):
         with self.lock:
@@ -58,7 +76,8 @@ class Dataset:
         dataset_file = self.output/'dataset.json'
         backend = json.loads(dataset_file.read_text()).get('backend','grabcut') if dataset_file.exists() else 'grabcut'
         return {'source': str(self.source), 'output': str(self.output), 'frames': rows,
-                'dataset_id':self.dataset_id,
+                'dataset_id':self.dataset_id,'input_mode':self.input_mode,'geometry_version':self.geometry_version,
+                'geometry_legacy':self.input_mode=='rgb' and self.geometry_version==RGB_LEGACY,
                 'backend':backend, 'sam_ready':ready(),
                 'pigs': len({r['pig_id'] for r in rows})}
 
@@ -66,15 +85,39 @@ class Dataset:
         with self.lock:
             row = self.row(frame_id)
             meta = self.metadata(row)
-            gray, _ = read_frame(row['source_dir'])
+            gray, depth, geometry, valid = self.frame_input(row)
+            if self.input_mode=='rgb' and self.geometry_version==RGB_LEGACY:
+                meta={**meta,'stats':{**meta.get('stats',{}),'valid_depth_ratio':None}}
             return {**meta, 'revision': meta.get('revision', 0),
-                    'width': gray.shape[1], 'height': gray.shape[0]}
+                    'geometry':geometry,'geometry_legacy':self.input_mode=='rgb' and self.geometry_version==RGB_LEGACY,
+                    'width': gray.shape[1], 'height': gray.shape[0],
+                    'reference_available':(Path(row['source_dir'])/('infrared.png' if self.input_mode=='rgb' else 'color.png')).is_file(),
+                    'depth_available':depth is not None}
 
     def media(self, frame_id, kind):
         row = self.row(frame_id)
         dest = self.dest(row)
-        if kind in {'color', 'depth'}:
-            path = Path(row['source_dir'])/('color.png' if kind == 'color' else 'depth_preview.png')
+        if kind == 'base':
+            return png_bytes(self.frame_input(row)[0])
+        if kind == 'reference':
+            if self.input_mode == 'rgb':
+                with Image.open(Path(row['source_dir'])/'infrared.png') as im:
+                    array=np.asarray(im)
+                from core import normalize_ir
+                return png_bytes(normalize_ir(array))
+            return (Path(row['source_dir'])/'color.png').read_bytes()
+        if kind == 'depth':
+            _,depth,_,_=self.frame_input(row)
+            if depth is None:
+                raise ValueError('没有对齐 RGB 的深度数组')
+            valid=np.isfinite(depth)&(depth>0)
+            preview=np.zeros(depth.shape,np.uint8)
+            if valid.any():
+                lo,hi=np.percentile(depth[valid],[1,99])
+                preview[valid]=(255-np.clip((depth[valid]-lo)/max(1,hi-lo),0,1)*254).astype(np.uint8)
+            return png_bytes(preview)
+        if kind == 'color':
+            path = Path(row['source_dir'])/'color.png'
             return path.read_bytes()
         if kind == 'infrared':
             path = dest/'infrared_display.png'
@@ -84,8 +127,12 @@ class Dataset:
             name = 'trunk_mask_working.png' if meta.get('status') in {'corrected','reviewed'} else 'trunk_mask_draft.png'
             path = dest/name
             if not path.exists():
-                gray, _ = read_frame(row['source_dir'])
-                return png_bytes(np.zeros(gray.shape, np.uint8))
+                gray, _, _, _ = self.frame_input(row)
+                return png_bytes(np.zeros(gray.shape[:2], np.uint8))
+            with Image.open(path) as im:
+                image,_,_,_=self.frame_input(row)
+                if im.size != (image.shape[1],image.shape[0]):
+                    raise ValueError('已保存掩码尺寸与所选输入图像不一致')
             return path.read_bytes()
         if kind == 'draft':
             return (dest/'trunk_mask_draft.png').read_bytes()
@@ -93,6 +140,8 @@ class Dataset:
 
     def generate(self, frame_id):
         with self.lock:
+            if self.input_mode != 'infrared':
+                raise ValueError('传统初稿仅支持红外；RGB 请使用 SAM 或手工勾画')
             row = self.row(frame_id)
             meta = self.metadata(row)
             if meta['status'] in {'corrected', 'reviewed'}:
@@ -102,16 +151,21 @@ class Dataset:
     def predict_sam(self, payload):
         # Inference changes only the preview; saving remains a separate action.
         with self.lock:
+            self.editable_geometry()
             row = self.row(payload['id'])
-            gray, _ = read_frame(row['source_dir'])
+            gray, _, geometry, valid = self.frame_input(row)
             if self.sam is None:
                 from sam_backend import SAMPredictor
                 self.sam = SAMPredictor()
-            mask, info = self.sam.predict(gray, payload.get('prompts',{}), key=str(Path(row['source_dir']).resolve()))
+            mask, info = self.sam.predict(gray, payload.get('prompts',{}), key=self.input_mode+':'+str(Path(row['source_dir']).resolve())+':'+geometry.get('geometry_id',''))
+            info['input_mode']=self.input_mode
+            info['geometry_version']=geometry['version']
+            mask=mask.copy();mask[~valid]=0
             if not mask.any():
                 raise ValueError('SAM 返回空掩码，请调整提示点或框')
             prediction_id = secrets.token_urlsafe(24)
             self.sam_predictions[prediction_id] = {'frame_id':row['id'], 'info':info,
+                                                  'geometry_id':geometry.get('geometry_id'),
                                                   'raw':png_bytes(self.sam.last_raw_mask)}
             while len(self.sam_predictions)>32:
                 self.sam_predictions.pop(next(iter(self.sam_predictions)))
@@ -120,6 +174,7 @@ class Dataset:
 
     def save(self, payload):
         with self.lock:
+            self.editable_geometry()
             row = self.row(payload['id'])
             old = self.metadata(row)
             revision = old.get('revision', 0)
@@ -130,35 +185,43 @@ class Dataset:
                 prediction = self.sam_predictions.get(payload['sam_prediction_id'])
                 if not prediction or prediction['frame_id']!=row['id']:
                     raise ValueError('SAM 预览已失效，请重新运行模型后保存')
-            gray, depth = read_frame(row['source_dir'])
+            gray, depth, geometry, valid = self.frame_input(row)
+            if prediction and prediction.get('geometry_id')!=geometry.get('geometry_id'):
+                raise ValueError('SAM 预览之后输入或标定发生变化，请重新运行模型')
+            previous_geometry=old.get('geometry',{})
+            if previous_geometry.get('geometry_id') and previous_geometry['geometry_id']!=geometry.get('geometry_id'):
+                raise ValueError('相机标定或几何来源发生变化，请核查后重新分割')
             encoded = payload.get('mask', '')
             if not encoded.startswith('data:image/png;base64,'):
                 raise ValueError('掩码必须是 PNG 图片')
             raw = base64.b64decode(encoded.split(',', 1)[1], validate=True)
             im = Image.open(io.BytesIO(raw))
             if im.size != (gray.shape[1], gray.shape[0]):
-                raise ValueError('掩码尺寸必须与原始红外图完全相同')
+                raise ValueError('掩码尺寸必须与所选原始图像完全相同')
             mask = np.asarray(im.convert('L'))
             if not np.isin(mask, [0, 255]).all():
                 raise ValueError('掩码像素只能是 0 和 255')
             if not mask.any():
                 raise ValueError('掩码为空，请先勾画可见躯干')
+            validate_mask_region(mask,valid)
             reviewed = payload.get('reviewed') is True
             direction = payload.get('head_side', 'unknown')
             if direction not in {'left','right','up','down','unknown'}:
                 raise ValueError('头侧方向无效')
             if reviewed and direction == 'unknown':
                 raise ValueError('确认合格前，请记录图中的头侧方向')
-            hashes = input_fingerprint(row['source_dir'])
+            hashes = input_fingerprint(row['source_dir'],self.input_mode,self.geometry_version)
             if old.get('source_sha256') and old['source_sha256'] != hashes:
-                raise ValueError('原始红外或深度文件发生变化，请先核查数据源')
+                raise ValueError('原始图像或对应深度文件发生变化，请先核查数据源')
             dest = self.dest(row)
             mask_png = png_bytes(mask)
             overlay_png = png_bytes(overlay(gray, mask))
             meta = {**old, **row, 'status': 'reviewed' if reviewed else 'corrected',
                     'reviewed': reviewed, 'revision': revision+1, 'saved_at': stamp(),
                     'head_side': direction, 'notes': str(payload.get('notes',''))[:4000],
-                    'shape_hw': list(mask.shape), 'source_sha256': hashes,
+                    'shape_hw': list(mask.shape), 'source_sha256': hashes,'input_mode':self.input_mode,
+                    'coordinate_space':geometry['coordinate_space'],'geometry':geometry,
+                    'depth_file':'depth_aligned_to_color_mm.npy' if self.input_mode=='rgb' and depth is not None else ('depth_mm.npy' if self.input_mode=='infrared' else None),
                     'stats': mask_stats(mask, depth),
                     'initial_method': old.get('initial_method', old.get('method', 'manual')),
                     'method': 'manual_correction'}
@@ -168,6 +231,8 @@ class Dataset:
             if reviewed:
                 meta['stats']['warnings'] = [w for w in meta['stats']['warnings'] if '待人工确认' not in w]
             # Each saved revision is retained independently.
+            write_geometry(dest,geometry,valid)
+            if self.input_mode=='rgb':atomic_bytes(dest/'color_display.png',png_bytes(gray))
             rev = dest/'revisions'/f'{revision+1:05d}'
             atomic_bytes(rev/'mask.png', mask_png)
             atomic_json(rev/'segmentation.json', meta)
@@ -279,7 +344,7 @@ def make_handler(workspace, token):
                 elif self.path=='/api/export':
                     self.send(workspace.start_export(payload))
                 elif self.path=='/api/scan':
-                    self.send(workspace.scan(payload.get('source')))
+                    self.send(workspace.scan(payload.get('source'),payload.get('input_mode','infrared')))
                 elif self.path=='/api/open_results':
                     self.send(workspace.open_results(payload.get('output'),payload.get('source_override')))
                 elif self.path=='/api/batch/start':

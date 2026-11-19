@@ -7,10 +7,11 @@ let polling=false;
 let flowBusy=false;
 let directorySelecting=false;
 let currentExport=null;
+let batchInputInitialized=false;
 
 function flowMessage(text,error=false){$('flowMessage').textContent=text;$('flowMessage').style.color=error?'#ffb0aa':'#a9d8c6'}
 function jobRunning(job){return job&&['running','stopping'].includes(job.status)}
-function setFlowBusy(value){flowBusy=value;for(const id of ['startBatch','scanSource','loadResults','newBatch','openResults','reviewCurrent','exportOpen','chooseSource','chooseParent','chooseResults','chooseRelocated'])$(id).disabled=value||state.jobActive||state.exportActive||directorySelecting}
+function setFlowBusy(value){flowBusy=value;for(const id of ['batchInputMode','startBatch','scanSource','loadResults','newBatch','openResults','reviewCurrent','exportOpen','chooseSource','chooseParent','chooseResults','chooseRelocated'])$(id).disabled=value||state.jobActive||state.exportActive||directorySelecting}
 function setMode(mode){
   if(state.busy||flowBusy||state.exportActive||directorySelecting)return;
   if(state.jobActive&&mode!=='review'){message('请等待分割完成，或先停止当前任务。',true);return}
@@ -23,20 +24,25 @@ function setMode(mode){
   if(mode!=='review')flowMessage('');
   requestAnimationFrame(fit);
 }
-function newFolderName(){const d=new Date();const pad=n=>String(n).padStart(2,'0');return 'itof_SAM2_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())}
+function newFolderName(){const d=new Date();const pad=n=>String(n).padStart(2,'0');return 'itof_SAM2_'+($('batchInputMode').value==='rgb'?'RGB_':'IR_')+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())}
+function batchInputHint(){
+  const rgb=$('batchInputMode').value==='rgb';
+  $('inputModeHint').textContent=rgb?'按 reconstruction.json 将 RGB 校正到保存的对齐深度网格，分割与复核共用该坐标。':'保留红外／原始深度网格；点云使用实际深度内参与畸变模型。';
+}
 function allowDirectoryChange(){return !state.dirty||window.confirm('当前图像有未保存修改。是否放弃这些修改并切换目录？')}
 function resetEditor(){
   state.current=null;state.meta=null;state.dirty=false;state.points=[];state.samPoints=[];
   state.samBox=null;state.samStart=null;state.samPredictionId=null;state.undo=[];state.redo=[];
   for(const [canvas,ctx]of [[$('base'),bc],[$('paint'),pc],[$('mask'),mc]])ctx.clearRect(0,0,canvas.width,canvas.height);
   $('title').textContent='选择一张底图';$('capture').textContent='';$('notes').value='';
+  $('geometryNote').textContent='';
 }
 async function adoptWorkspace(data,{loadFirst=true}={}){
   const changed=state.datasetId!==data.dataset_id;
   if(changed)resetEditor();
   workspaceData=data;state.datasetId=data.dataset_id;state.rows=data.frames||[];
-  $('samTools').hidden=!data.sam_ready;$('generate').hidden=data.backend==='sam2';
-  $('source').textContent=data.output?'当前成果：'+data.output:'尚未打开成果目录';
+  $('samTools').hidden=!data.sam_ready;$('generate').hidden=data.backend==='sam2'||data.input_mode==='rgb';
+  $('source').textContent=data.output?'当前成果（'+(data.input_mode==='rgb'?'RGB':'红外')+'）：'+data.output:'尚未打开成果目录';
   $('source').title=[data.output?'当前成果：'+data.output:'',data.source?'原始数据：'+data.source:''].filter(Boolean).join('\n');
   $('currentDataset').textContent=data.output?'当前成果：'+data.output:'';
   $('reviewCurrent').hidden=!data.output;
@@ -46,6 +52,7 @@ async function adoptWorkspace(data,{loadFirst=true}={}){
   if(!$('exportParent').value)$('exportParent').value=data.last_export_parent||data.last_parent||'';
   if(!$('batchSource').value)$('batchSource').value=data.last_source||data.source||'';
   if(!$('batchParent').value)$('batchParent').value=data.last_parent||'';
+  if(!batchInputInitialized){$('batchInputMode').value=data.last_input_mode||'infrared';batchInputHint();$('batchName').value=newFolderName();batchInputInitialized=true}
   if(!$('resultFolder').value)$('resultFolder').value=data.output||'';
   showJob(data.job);
   showExportJob(data.export_job);
@@ -119,7 +126,7 @@ $('directoryUse').onclick=async()=>{
   $(directoryTarget).value=currentDirectory.path;$(directoryTarget).dispatchEvent(new Event('input'));
   $('directoryDialog').close();
 };
-$('chooseSource').onclick=()=>chooseDirectory('batchSource','选择 iToF 原始数据目录');
+$('chooseSource').onclick=()=>chooseDirectory('batchSource','选择 iToF 或双目原始数据目录');
 $('chooseParent').onclick=()=>chooseDirectory('batchParent','选择成果保存位置');
 $('chooseResults').onclick=()=>chooseDirectory('resultFolder','选择分割成果根目录');
 $('chooseRelocated').onclick=()=>chooseDirectory('resultSource','选择移动后的原始数据目录');
@@ -129,16 +136,17 @@ $('openResults').onclick=()=>setMode('open');
 $('reviewCurrent').onclick=()=>setMode('review');
 $('flowClose').onclick=()=>setMode('review');$('flowOpenResults').onclick=()=>setMode('review');
 $('batchSource').oninput=()=>{$('scanResult').textContent=''};
+$('batchInputMode').onchange=()=>{$('scanResult').textContent='';batchInputHint();if(!$('batchName').value||/^itof_SAM2_(IR_|RGB_)?\d{8}_\d{6}$/.test($('batchName').value))$('batchName').value=newFolderName()};
 $('scanSource').onclick=async()=>{
   setFlowBusy(true);flowMessage('正在检查数据目录…');
-  try{const r=await api('/api/scan',{source:$('batchSource').value});$('scanResult').textContent=`${r.pigs} 头猪 · ${r.frames} 次采集`;flowMessage('数据目录可用，可以开始分割。')}
+  try{const r=await api('/api/scan',{source:$('batchSource').value,input_mode:$('batchInputMode').value});$('scanResult').textContent=`${r.pigs} 头猪 · ${r.frames} 次采集 · ${r.input_mode==='rgb'?'RGB':'红外'}`;flowMessage('数据目录可用，可以开始分割。')}
   catch(e){flowMessage(e.message,true)}finally{setFlowBusy(false)}
 };
 $('startBatch').onclick=async()=>{
   if(state.busy||!allowDirectoryChange())return;
   setFlowBusy(true);flowMessage('正在准备分割任务…');
   try{
-    const d=await api('/api/batch/start',{source:$('batchSource').value,parent:$('batchParent').value,name:$('batchName').value});
+    const d=await api('/api/batch/start',{source:$('batchSource').value,parent:$('batchParent').value,name:$('batchName').value,input_mode:$('batchInputMode').value});
     state.dirty=false;await adoptWorkspace(d);$('resultFolder').value=d.output;
     $('workflow').hidden=true;$('batchName').value=newFolderName();
   }catch(e){flowMessage(e.message,true)}finally{setFlowBusy(false)}

@@ -1,4 +1,4 @@
-"""iToF infrared segmentation. All generated files live outside the source tree."""
+"""Native-coordinate IR/RGB segmentation; generated files stay outside raw data."""
 from __future__ import annotations
 
 import hashlib
@@ -16,6 +16,34 @@ from PIL import Image
 
 VERSION = 'ir-depth-grabcut-v1'
 cv2.setNumThreads(1)
+
+
+def input_mode(value='infrared'):
+    if value not in {'infrared', 'rgb'}:
+        raise ValueError('分割输入必须选择红外图或 RGB 图像')
+    return value
+
+
+def read_input(folder, mode='infrared', version=None):
+    """RGB uses the saved aligned-depth grid; IR keeps original depth coordinates."""
+    from geometry import prepare_frame
+    image,depth,_,_=prepare_frame(folder,input_mode(mode),version)
+    return image,depth
+
+
+def rgb_seed(image):
+    """Suggest a central object from RGB alone, at reduced cost for large frames."""
+    h, w = image.shape[:2]
+    scale = min(1., 640/max(h, w))
+    small = cv2.resize(image, (max(8, round(w*scale)), max(8, round(h*scale))))
+    sh, sw = small.shape[:2]
+    labels = np.zeros((sh, sw), np.uint8)
+    cv2.setRNGSeed(7)
+    cv2.grabCut(small, labels, (max(1, sw//20), max(1, sh//10),
+                              max(2, sw*9//10), max(2, sh*8//10)),
+                np.zeros((1,65)), np.zeros((1,65)), 3, cv2.GC_INIT_WITH_RECT)
+    candidate = central_component(np.isin(labels, [cv2.GC_FGD, cv2.GC_PR_FGD]))
+    return cv2.resize(candidate*255, (w,h), interpolation=cv2.INTER_NEAREST)
 
 
 def stamp():
@@ -141,7 +169,7 @@ def auto_segment(gray, depth):
 
 
 def overlay(gray, mask):
-    rgb = np.repeat(gray[..., None], 3, axis=2)
+    rgb = np.repeat(gray[..., None], 3, axis=2) if gray.ndim == 2 else gray.copy()
     fg = mask > 0
     rgb[fg] = (rgb[fg]*.60 + np.array([35, 222, 166])*.40).astype(np.uint8)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -151,7 +179,7 @@ def overlay(gray, mask):
 
 def mask_stats(mask, depth):
     area = int((mask > 0).sum())
-    valid = (mask > 0) & np.isfinite(depth) & (depth > 0)
+    valid = (mask > 0) & np.isfinite(depth) & (depth > 0) if depth is not None else None
     n, _ = cv2.connectedComponents((mask > 0).astype(np.uint8), 8)
     touches = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
     warnings = ['头颈、尾根及遮挡边界待人工确认']
@@ -159,26 +187,29 @@ def mask_stats(mask, depth):
         warnings.append('候选区域触及图像边界，检查是否出画')
     if n > 2:
         warnings.append('存在多个分离区域，请检查是否混入其他猪或背景')
-    if area and valid.sum()/area < .95:
+    if depth is None:
+        warnings.append('缺少对齐 RGB 的深度数组；未计算有效深度比例，不能直接套用红外坐标深度')
+    elif area and valid.sum()/area < .95:
         warnings.append('掩码内存在较多无效深度，后续点云需单独质检')
     return {'area_px': area, 'area_ratio': area/mask.size,
-            'valid_depth_ratio': float(valid.sum()/area) if area else 0,
+            'valid_depth_ratio': (float(valid.sum()/area) if area else 0) if valid is not None else None,
             'components': n-1, 'touches_image_border': touches, 'warnings': warnings}
 
 
-def discover(source):
+def discover(source, mode='infrared'):
+    mode = input_mode(mode)
     source = Path(source).resolve()
     if not source.is_dir():
         raise ValueError('数据目录不存在')
     frames = []
-    for p in sorted(source.rglob('infrared.npy')):
+    for p in sorted(source.rglob('color.png' if mode == 'rgb' else 'infrared.npy')):
         if p.is_symlink() or any(part.startswith('.') for part in p.relative_to(source).parts):
             continue
         folder = p.parent
         # Do not follow source-directory symlinks or allow source read escapes.
         if folder.resolve() != folder or any(q.is_symlink() for q in folder.iterdir()):
             continue
-        if not (folder/'infrared.png').is_file() or not (folder/'depth_mm.npy').is_file():
+        if mode == 'infrared' and (not (folder/'infrared.png').is_file() or not (folder/'depth_mm.npy').is_file()):
             continue
         rel = folder.relative_to(source).as_posix()
         pig = next((v[4:] for v in reversed(folder.relative_to(source).parts) if v.startswith('pig_')), '未知')
@@ -188,21 +219,34 @@ def discover(source):
     return frames
 
 
-def input_fingerprint(folder):
+def input_fingerprint(folder, mode='infrared', version=None):
+    input_mode(mode)
+    names = ['infrared.npy', 'infrared.png', 'depth_mm.npy']
+    if mode == 'rgb':
+        names = ['color.png']
+        if (Path(folder)/'depth_aligned_to_color_mm.npy').is_file():
+            names.append('depth_aligned_to_color_mm.npy')
+        from geometry import RGB_LEGACY
+        if version != RGB_LEGACY:
+            names.extend(name for name in ['reconstruction.json','calibration.json','depth_aligned_to_color_code_u16.npy']
+                         if (Path(folder)/name).is_file())
     return {name: hashlib.sha256((Path(folder)/name).read_bytes()).hexdigest()
-            for name in ['infrared.npy', 'infrared.png', 'depth_mm.npy']}
+            for name in names}
 
 
 def write_draft(row, output):
-    gray, depth = read_frame(row['source_dir'])
+    from geometry import prepare_frame,write_geometry
+    gray, depth, geometry, valid = prepare_frame(row['source_dir'],'infrared')
     mask = auto_segment(gray, depth)
     dest = Path(output)/row['relative_dir']
     atomic_bytes(dest/'infrared_display.png', png_bytes(gray))
     atomic_bytes(dest/'trunk_mask_draft.png', png_bytes(mask))
     atomic_bytes(dest/'overlay_draft.png', png_bytes(overlay(gray, mask)))
+    write_geometry(dest,geometry,valid)
     meta = {**row, 'method': VERSION, 'status': 'draft', 'reviewed': False,
             'created_at': stamp(), 'shape_hw': list(gray.shape),
             'source_sha256': input_fingerprint(row['source_dir']),
+            'input_mode':'infrared','coordinate_space':geometry['coordinate_space'],'geometry':geometry,
             'mask_definition': '可见躯干候选；头颈、耳、尾、腿和遮挡边界须人工修正',
             'stats': mask_stats(mask, depth)}
     atomic_json(dest/'segmentation.json', meta)

@@ -11,7 +11,8 @@ import shutil
 import tempfile
 import threading
 
-from core import atomic_bytes, atomic_json, discover, stamp, validate_output
+from core import atomic_bytes, atomic_json, discover, stamp, validate_output, input_mode
+from geometry import RGB_VERSION, calibration_metadata
 
 
 EXPORT_SCOPES = {'keep', 'keep_reviewed', 'reject', 'unsure', 'pending', 'all'}
@@ -105,6 +106,7 @@ class Workspace:
                     'native_picker':supported(),'startup_warning':self.startup_warning,
                     'last_export_parent':self.settings.get('last_export_parent',''),
                     'last_source':self.settings.get('last_source',''),
+                    'last_input_mode':self.settings.get('last_input_mode','infrared'),
                     'last_parent':self.settings.get('last_parent',str(Path(__file__).resolve().parent.parent/'outputs'))}
 
     def directories(self, value=None):
@@ -120,12 +122,18 @@ class Workspace:
                 'directories':sorted(entries,key=lambda e:e['name'].casefold()),
                 'is_results':(folder/'dataset.json').is_file()}
 
-    def scan(self, value):
+    def scan(self, value, mode='infrared'):
+        mode=input_mode(mode)
         source=directory(value)
-        rows=discover(source)
+        rows=discover(source,mode)
         if not rows:
-            raise ValueError('没有找到iToF采集。请选择包含 infrared.npy、infrared.png 和 depth_mm.npy 的原始目录')
-        return {'source':str(source),'frames':len(rows),'pigs':len({r['pig_id'] for r in rows})}
+            raise ValueError('没有找到可用采集：RGB 模式需要 color.png；红外模式需要 infrared.npy、infrared.png 和 depth_mm.npy')
+        if mode=='rgb':
+            for row in rows:
+                try:calibration_metadata(row['source_dir'],mode)
+                except ValueError as exc:raise ValueError(f"{row['relative_dir']}：{exc}") from exc
+        return {'source':str(source),'input_mode':mode,'frames':len(rows),'pigs':len({r['pig_id'] for r in rows}),
+                'geometry_checked':mode=='rgb'}
 
     def open_results(self, value, source_override=None, remember=True):
         from app import Dataset
@@ -134,11 +142,12 @@ class Workspace:
         if not manifest.is_file():
             raise ValueError('该目录没有 dataset.json，请选择分割成果的根目录，而不是某头猪或某次采集目录')
         data=json.loads(manifest.read_text())
+        mode=input_mode(data.get('input_mode','infrared'))
         source=directory(source_override or self.settings.get('source_overrides',{}).get(str(output)) or data['source'])
         source,output=validate_output(source,output)
         if self.state_dir==source or source in self.state_dir.parents or self.state_dir in source.parents:
             raise ValueError('原始目录与工作台进度目录必须相互独立')
-        available={r['relative_dir']:r for r in discover(source)}
+        available={r['relative_dir']:r for r in discover(source,mode)}
         saved=data.get('frames')
         if not isinstance(saved,list) or not saved:
             raise ValueError('成果清单中没有采集记录')
@@ -156,7 +165,7 @@ class Workspace:
                 raise ValueError('成果清单包含无效或重复采集编号')
             ids.add(row['id'])
             rows.append(row)
-        dataset=Dataset(source,output,rows=rows)
+        dataset=Dataset(source,output,rows=rows,mode=mode)
         with self.lock:
             self._idle()
             self.dataset=dataset
@@ -179,6 +188,7 @@ class Workspace:
     def start(self, payload):
         from app import Dataset
         from sam_backend import ready
+        mode=input_mode(payload.get('input_mode','infrared'))
         source=directory(payload.get('source'))
         parent=directory(payload.get('parent'))
         name=folder_name(payload.get('name',''))
@@ -190,9 +200,9 @@ class Workspace:
             raise ValueError('原始目录与工作台进度目录必须相互独立')
         if output==self.state_dir or output in self.state_dir.parents or self.state_dir in output.parents:
             raise ValueError('成果目录与工作台进度目录必须相互独立')
-        rows=discover(source)
+        rows=discover(source,mode)
         if not rows:
-            raise ValueError('原始目录没有可用的iToF红外和深度数据')
+            raise ValueError('原始目录没有所选模式的数据；RGB 需要 color.png，红外需要红外和深度文件')
         if not ready():
             raise ValueError('本机SAM权重或官方代码缺失，请先恢复模型文件')
         with self.lock:
@@ -201,14 +211,15 @@ class Workspace:
                 raise ValueError('成果目录已有文件。请换一个文件夹名；查看已有成果请使用“打开成果目录”')
             output.mkdir(parents=False,exist_ok=True)
             atomic_json(output/'dataset.json',{'source':str(source),'output':str(output),'backend':'sam2',
-                        'frames':rows,'created_at':stamp(),'workflow':'browser_batch'})
-            self.dataset=Dataset(source,output,rows=rows)
-            self.settings.update(last_source=str(source),last_output=str(output),last_parent=str(parent))
+                        'frames':rows,'created_at':stamp(),'workflow':'browser_batch','input_mode':mode,
+                        'geometry_version':RGB_VERSION if mode=='rgb' else None})
+            self.dataset=Dataset(source,output,rows=rows,mode=mode)
+            self.settings.update(last_source=str(source),last_output=str(output),last_parent=str(parent),last_input_mode=mode)
             self._remember()
             self.stop_event.clear()
             self.job={'id':secrets.token_hex(8),'status':'running','done':0,'success':0,'failed':0,
                       'total':len(rows),'current':'正在加载SAM模型','output':str(output),
-                      'source':str(source),'started_at':stamp(),'errors':[]}
+                      'source':str(source),'input_mode':mode,'started_at':stamp(),'errors':[]}
             self._persist_job()
             self.worker=threading.Thread(target=self._run,args=(self.dataset,),daemon=False)
             self.worker.start()
@@ -237,7 +248,10 @@ class Workspace:
                 with self.lock:
                     self.job['current']=f"猪 {row['pig_id']} / {row['capture_id']}"
                 try:
-                    (self.processor or segment_frame)(row,dataset.output,model)
+                    if self.processor:
+                        self.processor(row,dataset.output,model)
+                    else:
+                        segment_frame(row,dataset.output,model,mode=dataset.input_mode)
                     with self.lock:
                         self.job['success']+=1
                 except Exception as e:
@@ -263,7 +277,7 @@ class Workspace:
                     'model':'SAM 2.1 Hiera Base Plus','requested':len(dataset.rows),
                     'masks':self.job['success'],'errors':self.job['errors'],
                     'status':self.job['status'],'reviewed':0,
-                    'source':str(dataset.source),'output':str(dataset.output),
+                    'source':str(dataset.source),'output':str(dataset.output),'input_mode':dataset.input_mode,
                     'error':self.job.get('error'),
                     'algorithm_note':'每帧临时计算GrabCut候选供SAM单点/框提示；不依赖旧成果目录；所有结果待人工复核'})
 
@@ -357,10 +371,11 @@ class Workspace:
             dataset=self.require_dataset(dataset_id)
             result=io.StringIO()
             writer=csv.writer(result)
-            writer.writerow(['耳标','采集时间','筛选','分割状态','备注','源目录','成果目录'])
+            writer.writerow(['耳标','采集时间','筛选','分割状态','备注','源目录','成果目录','分割输入'])
             for row in dataset.rows if rows is None else rows:
                 m=dataset.metadata(row)
                 writer.writerow([row['pig_id'],row['capture_id'],
                                  {'keep':'保留','reject':'淘汰','unsure':'待定','pending':'未筛选'}.get(m.get('decision','pending')),
-                                 m['status'],m.get('notes',''),row['source_dir'],str(Path(output)/row['relative_dir'] if output else dataset.dest(row))])
+                                 m['status'],m.get('notes',''),row['source_dir'],str(Path(output)/row['relative_dir'] if output else dataset.dest(row)),
+                                 'RGB' if dataset.input_mode=='rgb' else '红外'])
             return ('\ufeff'+result.getvalue()).encode('utf-8')

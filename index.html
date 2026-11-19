@@ -25,6 +25,7 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 <div class="workflowGrid">
 <label>原始数据目录<div class="folderField"><input id="batchSource" placeholder="选择包含猪只采集的 iToF 文件夹"><button id="chooseSource">选择文件夹</button></div></label>
 <label>成果保存到<div class="folderField"><input id="batchParent" placeholder="选择成果存放位置"><button id="chooseParent">选择文件夹</button></div></label>
+<label>分割输入<select id="batchInputMode"><option value="infrared">红外图分割（原始深度坐标）</option><option value="rgb">RGB 图像分割（匹配对齐深度）</option></select><small id="inputModeHint">使用红外图生成掩码，复核时显示红外底图。</small></label>
 <label>新建成果文件夹名<input id="batchName" placeholder="例如：itof_SAM2_本次分割"></label>
 <div class="hint">模型：SAM 2.1 Base Plus<br>自动初稿需要复核头耳尾腿、遮挡和出画位置。</div>
 <div class="flowActions"><button id="scanSource">检查数据</button><button id="startBatch" class="primary">开始分割</button><span id="scanResult" class="muted"></span><button id="flowClose" hidden>返回复核</button></div>
@@ -40,17 +41,18 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 <div class="shell" id="editor" hidden>
 <aside class="left"><input id="search" placeholder="搜索耳标或拍摄时间" aria-label="搜索采集"><select id="filter" aria-label="筛选状态"><option value="all">全部采集</option><option value="decision:pending">未筛选</option><option value="decision:keep">已保留</option><option value="decision:reject">已淘汰</option><option value="decision:unsure">待定</option><option value="draft">待复核初稿</option><option value="corrected">已修正，待确认</option><option value="reviewed">已确认合格</option><option value="pending">未生成</option></select><div id="list"></div><small>筛选记录保存在当前成果目录；原始数据只读。</small></aside>
 <main>
-<div class="caption"><div><div id="title">选择一张底图</div><small id="capture"></small></div><div><button id="prev">上一张</button> <button id="next">下一张</button></div></div>
+<div class="caption"><div><div id="title">选择一张底图</div><small id="capture"></small></div><div><small id="reviewInputMode"></small> <button id="prev">上一张</button> <button id="next">下一张</button></div></div>
 <div class="toolbar" id="tools"><button data-tool="brush" class="active">补画 B</button><button data-tool="erase">擦除 E</button><button data-tool="polyAdd">多边形补画</button><button data-tool="polyErase">多边形擦除</button><button id="finishPoly">闭合轮廓 ↵</button><button id="undo">撤销</button><button id="redo">重做</button></div>
 <div class="toolbar" id="samTools"><strong>SAM 2.1</strong><button data-tool="samPositive">目标点 ＋</button><button data-tool="samNegative">背景点 −</button><button data-tool="samBox">框选目标</button><button id="samPredict" class="primary">运行 SAM</button><button id="samClear">清空提示</button><small id="samPromptCount">先在猪体内部点一下</small></div>
 <div class="toolbar"><button data-view="overlay" class="active">叠加预览</button><button data-view="original">红外原图</button><button data-view="binary">二值掩码</button><label class="inline">笔刷 <input id="brush" type="range" min="2" max="90" value="20" aria-label="笔刷直径"><span id="brushLabel">20</span></label><label class="inline">叠加 <input id="opacity" type="range" min="5" max="85" value="40" aria-label="叠加透明度"></label><select id="zoom" aria-label="画布缩放"><option value="fit">适应窗口</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></div>
 <div id="viewport"><div id="stage"><canvas id="base" width="640" height="576"></canvas><canvas id="paint" width="640" height="576"></canvas><canvas id="mask" width="640" height="576"></canvas></div></div>
+<small id="geometryNote" role="status"></small>
 <div id="message" role="status">鼠标拖动补画或擦除；多边形点击添加顶点，回车闭合，Esc 取消。</div>
 </main>
 <aside class="right">
 <section class="reviewSection"><div class="sectionHeading"><div class="sectionTitle">辅助查看</div></div>
-<details class="reviewHelp"><summary>躯干标注说明</summary><div class="hint">目标是<strong>可见躯干</strong>。去掉头、耳、尾、腿和背景；遮挡处沿可见边界描画，不补出被挡住的身体。RGB 仅作部位参考，不在彩色图上画掩码。</div></details>
-<div class="preview"><button id="rgbBtn" title="放大 RGB 参考图"><img id="rgb" alt="RGB 参考"><small>RGB 参考 ↗</small></button><button id="depthBtn" title="放大深度预览"><img id="depth" alt="深度预览"><small>深度预览 ↗</small></button></div></section>
+<details class="reviewHelp"><summary>躯干标注说明</summary><div class="hint">目标是<strong>可见躯干</strong>。去掉头、耳、尾、腿和背景；遮挡处沿可见边界描画，不补出被挡住的身体。<span id="inputReviewHint">当前在红外底图上修正掩码，RGB 仅作部位参考。</span></div></details>
+<div class="preview"><button id="rgbBtn" title="放大 RGB 参考图"><img id="rgb" alt="RGB 参考"><small id="referenceLabel">RGB 参考 ↗</small></button><button id="depthBtn" title="放大深度预览"><img id="depth" alt="深度预览"><small id="depthLabel">深度预览 ↗</small></button></div></section>
 <section class="reviewSection"><div class="sectionTitle">当前结果</div><div id="stats">—</div><details id="warningDetails" class="reviewWarnings" hidden><summary id="warningSummary">复核提醒</summary><div id="warn"></div></details></section>
 <label class="headField">图中的头侧方向<select id="head"><option value="unknown">尚未记录</option><option value="left">左侧</option><option value="right">右侧</option><option value="up">上侧</option><option value="down">下侧</option></select></label>
 <label>备注<textarea id="notes" placeholder="如：尾根待修、左侧被栏杆遮挡"></textarea></label>
@@ -92,7 +94,8 @@ function snapshot(){state.undo.push(mc.getImageData(0,0,$('mask').width,$('mask'
 function dirty(){state.dirty=true;$('title').textContent='耳标 '+state.current.pig_id+' · 有未保存修改';schedule()}
 function readStats(meta){
   const s=meta.stats||{},frag=document.createDocumentFragment();
-  for(const [label,value]of [['状态',names[meta.status]||'未生成'],['修订',meta.revision||0],['面积',(s.area_px?.toLocaleString()||'—')+' px'],['有效深度',s.valid_depth_ratio!==undefined?(100*s.valid_depth_ratio).toFixed(1)+'%':'—']]){
+  if(state.meta?.geometry_legacy)s.valid_depth_ratio=null;
+  for(const [label,value]of [['状态',names[meta.status]||'未生成'],['修订',meta.revision||0],['面积',(s.area_px?.toLocaleString()||'—')+' px'],['有效深度',s.valid_depth_ratio!=null?(100*s.valid_depth_ratio).toFixed(1)+'%':'—']]){
     const item=document.createElement('div'),name=document.createElement('span'),text=document.createElement('strong');
     name.textContent=label;text.textContent=value;item.append(name,text);frag.append(item);
   }
@@ -112,8 +115,47 @@ function controls(disabled){
   for(const id of ['prev','next','save','approve','restore','generate','samPredict','samClear','keepResult','rejectResult','unsureResult'])$(id).disabled=disabled||!state.meta||state.exportActive||(state.jobActive&&!['prev','next'].includes(id));
   for(const id of ['head','notes'])$(id).disabled=disabled||state.jobActive||state.exportActive;
   if(!disabled&&state.meta)readStats(state.meta);
+  if(state.meta?.geometry_legacy)for(const id of ['save','approve','generate','restore','samPredict','samClear'])$(id).disabled=true;
 }
-async function openFrame(row){if(state.busy||!row)return;if(state.dirty&&!window.confirm('当前修改尚未保存，是否放弃修改并切换？'))return;controls(true);const seq=++state.loadSeq;try{const meta=await api('/api/frame?id='+row.id);const [ir,mask]=await Promise.all([loadImage(imageURL(row.id,'infrared')),loadImage(imageURL(row.id,'mask'))]);if(seq!==state.loadSeq)return;state.current=row;state.meta=meta;state.dirty=false;state.points=[];state.samPoints=[];state.samBox=null;state.samPredictionId=null;promptCount();state.undo=[];state.redo=[];for(const id of ['base','paint','mask']){$(id).width=meta.width;$(id).height=meta.height}bc.drawImage(ir,0,0);mc.drawImage(mask,0,0);$('title').textContent='耳标 '+row.pig_id;$('capture').textContent=row.capture_id+' · '+meta.width+'×'+meta.height;$('head').value=meta.head_side||'unknown';$('notes').value=meta.notes||'';$('rgb').src=imageURL(row.id,'color');$('depth').src=imageURL(row.id,'depth');readStats(meta);renderList();fit();render();message('鼠标拖动补画或擦除；多边形点击添加顶点，回车闭合，Esc 取消。')}catch(e){message(e.message,true)}finally{controls(false)}}
+function reviewInputUI(meta){
+  const rgb=meta.input_mode==='rgb',label=rgb?'RGB':'红外';
+  $('reviewInputMode').textContent=label+(meta.geometry_legacy?' · 旧坐标':' 分割成果');
+  document.querySelector('[data-view="original"]').textContent=rgb&&!meta.geometry_legacy?'RGB 校正底图':label+' 原图';
+  $('samPredict').textContent='运行 SAM（'+label+'）';
+  $('inputReviewHint').textContent=rgb?'RGB 已按保存的对齐深度 profile 重映射；在这个坐标网格上修正掩码，红外只作参考。':'红外掩码保留原始深度网格；生成点云时使用原始深度内参与畸变模型，RGB 只作参考。';
+  const geometry=meta.geometry||{};
+  $('geometryNote').textContent=meta.geometry_legacy?'旧 RGB 成果未校正，仅供查看和筛选；用于点云请新建 RGB 分割任务。':geometry.status==='verified'?
+    (rgb?'RGB 已匹配保存的对齐深度坐标':'红外／原始深度像素几何已核对')+' · '+(geometry.pointcloud_ready?'点云坐标系：'+(rgb?'彩色相机':'深度相机')+'，单位 mm':'缺少对应深度，暂不能生成点云'):
+    '缺少完整标定记录：可复核分割，尚不能确认点云几何。';
+  $('geometryNote').style.color=meta.geometry_legacy||geometry.status!=='verified'?'#e6c58a':'#95acb4';
+  if(meta.geometry_legacy)$('inputReviewHint').textContent='旧掩码仍在原始 RGB 像素坐标，不会自动叠到校正图上；请新建 RGB 任务后用于点云。';
+  const reference=rgb?'红外参考':'RGB 参考';
+  $('referenceLabel').textContent=reference+' ↗';$('rgb').alt=reference;$('rgbBtn').title='放大'+reference;
+  $('depthLabel').textContent=rgb?'RGB 对齐深度 ↗':'深度预览 ↗';
+  $('rgbBtn').hidden=!meta.reference_available;$('depthBtn').hidden=!meta.depth_available;
+  for(const [id,button,kind,available]of [['rgb','rgbBtn','reference',meta.reference_available],['depth','depthBtn','depth',meta.depth_available]]){
+    $(id).removeAttribute('src');$(id).onerror=()=>{$(button).hidden=true};
+    if(available)$(id).src=imageURL(state.current.id,kind);
+  }
+}
+async function openFrame(row){
+  if(state.busy||!row)return;
+  if(state.dirty&&!window.confirm('当前修改尚未保存，是否放弃修改并切换？'))return;
+  controls(true);const seq=++state.loadSeq;
+  try{
+    const meta=await api('/api/frame?id='+row.id);
+    const [base,mask]=await Promise.all([loadImage(imageURL(row.id,'base')),loadImage(imageURL(row.id,'mask'))]);
+    if(seq!==state.loadSeq)return;
+    if(base.naturalWidth!==meta.width||base.naturalHeight!==meta.height||mask.naturalWidth!==meta.width||mask.naturalHeight!==meta.height)throw Error('底图与掩码尺寸不一致，请检查成果目录');
+    state.current=row;state.meta=meta;state.dirty=false;state.points=[];state.samPoints=[];state.samBox=null;state.samPredictionId=null;promptCount();state.undo=[];state.redo=[];
+    for(const id of ['base','paint','mask']){$(id).width=meta.width;$(id).height=meta.height}
+    bc.drawImage(base,0,0);mc.drawImage(mask,0,0);
+    $('title').textContent='耳标 '+row.pig_id;$('capture').textContent=row.capture_id+' · '+(meta.input_mode==='rgb'?'RGB':'红外')+' · '+meta.width+'×'+meta.height;
+    $('head').value=meta.head_side||'unknown';$('notes').value=meta.notes||'';
+    reviewInputUI(meta);readStats(meta);renderList();fit();render();
+    message('鼠标拖动补画或擦除；多边形点击添加顶点，回车闭合，Esc 取消。');
+  }catch(e){message(e.message,true)}finally{controls(false)}
+}
 function point(e){const r=$('paint').getBoundingClientRect();return{x:Math.max(0,Math.min($('mask').width-1,(e.clientX-r.left)*$('mask').width/r.width)),y:Math.max(0,Math.min($('mask').height-1,(e.clientY-r.top)*$('mask').height/r.height))}}
 function tool(value){if(state.busy||state.jobActive)return;state.tool=value;state.points=[];for(const b of document.querySelectorAll('[data-tool]'))b.classList.toggle('active',b.dataset.tool===value);schedule()}
 for(const b of document.querySelectorAll('[data-tool]'))b.onclick=()=>tool(b.dataset.tool);
@@ -121,7 +163,7 @@ function view(value){state.view=value;for(const b of document.querySelectorAll('
 for(const b of document.querySelectorAll('[data-view]'))b.onclick=()=>view(b.dataset.view);
 function stroke(a,b){mc.strokeStyle=state.tool==='erase'?'black':'white';mc.lineWidth=Number($('brush').value);mc.lineCap='round';mc.lineJoin='round';mc.beginPath();mc.moveTo(a.x,a.y);mc.lineTo(b.x,b.y);mc.stroke();mc.fillStyle=mc.strokeStyle;mc.beginPath();mc.arc(b.x,b.y,mc.lineWidth/2,0,Math.PI*2);mc.fill();dirty()}
 let lastPoint=null;
-$('paint').onpointerdown=e=>{if(!state.meta||state.busy||state.jobActive||e.button!==0)return;e.preventDefault();if(state.view==='original')view('overlay');const p=point(e);if(state.tool==='samPositive'||state.tool==='samNegative'){state.samPoints.push({...p,label:state.tool==='samPositive'?1:0});promptCount();message('提示点已添加；点击“运行 SAM”更新分割。');return}if(state.tool==='samBox'){state.samStart=p;state.samBox=[p.x,p.y,p.x,p.y];$('paint').setPointerCapture(e.pointerId);schedule();return}if(state.tool.startsWith('poly')){state.points.push(p);schedule();return}snapshot();state.draw=true;lastPoint=p;$('paint').setPointerCapture(e.pointerId);stroke(p,p)};
+$('paint').onpointerdown=e=>{if(!state.meta||state.meta.geometry_legacy||state.busy||state.jobActive||e.button!==0)return;e.preventDefault();if(state.view==='original')view('overlay');const p=point(e);if(state.tool==='samPositive'||state.tool==='samNegative'){state.samPoints.push({...p,label:state.tool==='samPositive'?1:0});promptCount();message('提示点已添加；点击“运行 SAM”更新分割。');return}if(state.tool==='samBox'){state.samStart=p;state.samBox=[p.x,p.y,p.x,p.y];$('paint').setPointerCapture(e.pointerId);schedule();return}if(state.tool.startsWith('poly')){state.points.push(p);schedule();return}snapshot();state.draw=true;lastPoint=p;$('paint').setPointerCapture(e.pointerId);stroke(p,p)};
 $('paint').onpointermove=e=>{if(state.samStart){const p=point(e),a=state.samStart;state.samBox=[Math.min(a.x,p.x),Math.min(a.y,p.y),Math.max(a.x,p.x),Math.max(a.y,p.y)];schedule();return}if(!state.draw)return;const p=point(e);stroke(lastPoint,p);lastPoint=p};
 function endStroke(){if(state.samStart){state.samStart=null;if(state.samBox[2]-state.samBox[0]<3||state.samBox[3]-state.samBox[1]<3)state.samBox=null;promptCount()}state.draw=false;lastPoint=null}
 $('paint').onpointerup=endStroke;$('paint').onpointercancel=endStroke;

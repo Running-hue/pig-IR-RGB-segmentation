@@ -33,7 +33,11 @@ const path=require('node:path');
       assert(layout.approveBottom<=height,'Approval button below viewport');
       assert(layout.bodyWidth<=width,'Page overflows horizontally');
       assert(layout.bodyHeight<=height,'Page overflows vertically');
-      for(const id of ['keepResult','rejectResult','unsureResult','save','approve'])await page.locator('#'+id).click({trial:true});
+      for(const id of ['keepResult','rejectResult','unsureResult','save','approve']){
+        const button=page.locator('#'+id);
+        if(await button.isEnabled())await button.click({trial:true});
+        else assert(await page.evaluate(()=>state.meta.geometry_legacy),'Unexpected disabled control: '+id);
+      }
       await page.screenshot({path:path.join(artifacts,`layout_${width}x${height}.png`)});
     }
     // Freeze polling at the network boundary while exercising banner states.
