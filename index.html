@@ -13,7 +13,7 @@
 <style>
 header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerActions{justify-content:flex-end;flex-shrink:0}#csvExport{padding:8px 11px;border:1px solid var(--line);border-radius:7px;text-decoration:none;white-space:nowrap}#csvExport:hover{background:#29424a}
 #exportDialog{width:min(640px,94vw);max-height:90dvh;overflow:auto;padding:22px}.exportFields{display:flex;flex-direction:column;gap:15px;margin:18px 0}.exportFields label{font-size:13px}#exportProgress{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.7;color:#a9d8c6}#exportMessage{color:#e6c58a;font-size:12px;line-height:1.7;overflow-wrap:anywhere}.exportActions{display:flex;justify-content:flex-end;margin-top:14px}#exportSummary{font-size:12px;color:var(--muted)}
-.right{padding:12px;gap:10px}.right>*,.reviewSection>*{flex-shrink:0}.reviewSection{display:flex;flex-direction:column;gap:6px}.sectionHeading{display:flex;justify-content:space-between;align-items:center;gap:8px}.right .sectionTitle{margin:0}.reviewHelp{font-size:12px;color:var(--muted)}.reviewHelp summary,.reviewWarnings summary{cursor:pointer}.reviewHelp .hint{margin-top:6px}.preview img{height:72px}.preview small{line-height:1.4}.right label{gap:4px}.headField{flex-direction:row;align-items:center;justify-content:space-between}.headField select{width:135px}.right textarea{height:46px;min-height:46px;resize:none}.right button,.right select{padding:7px 8px}#stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;white-space:normal;line-height:1.6}#stats>div{display:flex;justify-content:space-between;gap:4px;white-space:nowrap}#stats span{color:var(--muted)}#stats strong{font-weight:500}.reviewWarnings{font-size:12px;color:#e6c58a;line-height:1.6}.reviewWarnings #warn{margin-top:4px}.restoreActions{display:flex;gap:6px}.restoreActions button{flex:1;min-width:0}.saveGroup{gap:6px;border-top:1px solid var(--line);padding-top:9px}.saveGroup small{font-size:11px;line-height:1.5}.decisionHelp{font-size:11px;line-height:1.5}
+.right{padding:12px;gap:10px}.right>*,.reviewSection>*{flex-shrink:0}.reviewSection{display:flex;flex-direction:column;gap:6px}.sectionHeading{display:flex;justify-content:space-between;align-items:center;gap:8px}.right .sectionTitle{margin:0}.reviewHelp{font-size:12px;color:var(--muted)}.reviewHelp summary,.reviewWarnings summary{cursor:pointer}.reviewHelp .hint{margin-top:6px}.preview img{height:72px}.preview small{line-height:1.4}.right label{gap:4px}.headField{min-width:0;margin:0;padding:0;border:0;font-size:12px;color:#bed0d6}.headField legend{padding:0;margin-bottom:4px}.headOptions{display:grid;grid-template-columns:1.8fr repeat(4,1fr);gap:3px}.headOptions label{position:relative;display:flex;align-items:center;justify-content:center;min-width:0;min-height:28px;padding:4px 2px;border:1px solid var(--line);border-radius:6px;background:#1a2b33;font-size:12px;line-height:18px;white-space:nowrap;cursor:pointer}.headOptions input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}.headOptions label:has(input:checked){color:var(--green);border-color:var(--green);background:#1a3a36}.headOptions label:has(input:focus-visible){outline:2px solid var(--green);outline-offset:2px}.headOptions label:has(input:enabled):hover{background:#29424a}.headField:disabled .headOptions{opacity:.4}.headField:disabled label{cursor:default}.right textarea{height:46px;min-height:46px;resize:none}.right button,.right select{padding:7px 8px}#stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;white-space:normal;line-height:1.6}#stats>div{display:flex;justify-content:space-between;gap:4px;white-space:nowrap}#stats span{color:var(--muted)}#stats strong{font-weight:500}.reviewWarnings{font-size:12px;color:#e6c58a;line-height:1.6}.reviewWarnings #warn{margin-top:4px}.restoreActions{display:flex;gap:6px}.restoreActions button{flex:1;min-width:0}.saveGroup{gap:6px;border-top:1px solid var(--line);padding-top:9px}.saveGroup small{font-size:11px;line-height:1.5}.decisionHelp{font-size:11px;line-height:1.5}
 @media(min-width:821px) and (max-height:800px){header{min-height:76px;padding:10px 16px}.right{padding:10px;gap:8px}.reviewSection{gap:5px}.preview img{height:60px}.right textarea{height:40px;min-height:40px}.right button,.right select{padding:6px 8px}.saveGroup{padding-top:7px}}
 @media(max-width:1200px){header>.headerActions{gap:6px}header button,#csvExport{font-size:12px;padding:7px 8px}#counts{font-size:11px}.shell{grid-template-columns:190px minmax(350px,1fr) 265px}}
 @media(max-width:820px){header{flex-wrap:wrap}header>.headerIdentity{flex-basis:100%}header>.headerActions{flex-shrink:1;justify-content:flex-start}.right{overflow:visible}.preview img{height:100px}.right textarea{resize:vertical}.saveGroup{margin-top:10px}}
@@ -51,7 +51,6 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
   .right button,.right select{font-size:13px;line-height:18px;padding:4px 7px;min-height:28px}
   .preview button{padding:3px}
   .right label{gap:3px}
-  .headField select{width:124px}
   .right textarea{height:34px;min-height:34px;padding:5px 7px;font-size:12px}
   #stats{gap:2px 6px;line-height:1.4}
   .decisionButtons,.restoreActions{gap:4px}
@@ -64,6 +63,29 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
   .preview img{height:48px}
   .reviewSection{gap:3px}
 }
+
+.right .autoAdvanceOption{flex-direction:row;align-items:center;gap:6px;font-size:12px;line-height:18px;cursor:pointer}
+.autoAdvanceOption input{width:14px;height:14px;min-width:14px;margin:0;padding:0;accent-color:var(--green);cursor:pointer}
+
+/* Camera filters and progress stay in the sidebar; the preview keeps its space. */
+.left{min-height:0;overflow:hidden}.left>*{flex-shrink:0}.left #list{min-height:0;flex:1;flex-shrink:1}
+#cameraFilters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+#cameraFilters button{padding:6px 2px;font-size:12px;white-space:nowrap;min-width:0}
+#cameraFilters button[aria-pressed="true"]{background:#1a3935;border-color:#63e2ba;color:#9ae8ce}
+#cameraFilters small{font-size:10px;color:var(--muted)}
+#cameraFilters button[data-camera="unknown"]{grid-column:1/-1}
+#reviewProgress{display:flex;flex-direction:column;gap:5px;padding:9px 0;border-bottom:1px solid var(--line)}
+.sidebarProgressLine{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:11px;white-space:nowrap}
+.sidebarProgressLine strong{font-size:11px;font-weight:500;font-variant-numeric:tabular-nums}
+#reviewProgress progress{display:block;width:100%;height:6px;margin:0;accent-color:#63e2ba}
+#reviewProgress #maskReviewProgress{accent-color:#92b9ff}
+#reviewProgress small{font-size:10px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.frame .captureLine{display:flex;align-items:center;gap:5px;min-width:0}
+.frame .captureLine small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frame .cameraBadge{flex-shrink:0;font-size:10px;padding:1px 4px;border-radius:4px;background:#243b42;color:#97dfd0}
+.frame .cameraBadge.stereo{background:#29354b;color:#afcaff}.frame .cameraBadge.unknown{color:#e6c58a}
+.listEmpty{font-size:12px;color:var(--muted);line-height:1.6;padding:10px 0}
+@media(max-width:820px){.left{height:380px}}
 </style>
 <header><div class="headerIdentity"><h1>猪体分割与复核</h1><div id="source" class="muted path">选择原始目录开始分割，或打开已有成果</div></div><div class="headerActions"><button id="newBatch">新建分割任务</button><button id="openResults">打开成果目录</button><button id="reviewCurrent" hidden>查看当前成果</button><button id="jobDetails" hidden>分割记录</button><button id="exportOpen" hidden>导出筛选成果</button><a id="csvExport" download="分割成果筛选记录.csv" hidden>下载筛选记录 CSV</a><div id="counts" class="muted"></div></div></header>
 <section id="workflow">
@@ -86,7 +108,7 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 <section id="jobPanel" hidden><div class="jobLine"><div id="jobText"></div><div class="headerActions"><button id="stopBatch">停止任务</button><button id="enterReview" class="primary" hidden>进入成果复核</button></div></div><progress id="jobProgress" max="1" value="0"></progress><details id="jobErrorDetails" hidden><summary>查看失败记录</summary><div id="jobErrors"></div></details></section>
 <div id="emptyHint"><h2>先选择一个文件夹</h2><p>新数据点击“新建分割任务”；已有分割结果点击“打开成果目录”。</p></div>
 <div class="shell" id="editor" hidden>
-<aside class="left"><input id="search" placeholder="搜索耳标或拍摄时间" aria-label="搜索采集"><select id="filter" aria-label="筛选状态"><option value="all">全部采集</option><option value="decision:pending">未筛选</option><option value="decision:keep">已保留</option><option value="decision:reject">已淘汰</option><option value="decision:unsure">待定</option><option value="draft">待复核初稿</option><option value="corrected">已修正，待确认</option><option value="reviewed">已确认合格</option><option value="pending">未生成</option></select><div id="list"></div><small>筛选记录保存在当前成果目录；原始数据只读。</small></aside>
+<aside class="left"><input id="search" placeholder="搜索耳标或拍摄时间" aria-label="搜索采集"><div id="cameraFilters" role="group" aria-label="按相机筛选采集"><button type="button" data-camera="all" aria-pressed="true">全部 <small id="cameraCountAll">0</small></button><button type="button" data-camera="itof" aria-pressed="false">iToF <small id="cameraCountItof">0</small></button><button type="button" data-camera="stereo" aria-pressed="false">双目 <small id="cameraCountStereo">0</small></button><button type="button" data-camera="unknown" aria-pressed="false" hidden>未识别 <small id="cameraCountUnknown">0</small></button></div><select id="filter" aria-label="筛选状态"><option value="all">全部采集</option><option value="decision:pending">未筛选</option><option value="decision:keep">已保留</option><option value="decision:reject">已淘汰</option><option value="decision:unsure">待定</option><option value="draft">待复核初稿</option><option value="corrected">已修正，待确认</option><option value="reviewed">已确认合格</option><option value="pending">未生成</option></select><section id="reviewProgress" aria-label="当前相机的分割与复核进度"><div class="sidebarProgressLine"><span>分割进度</span><strong id="segmentationProgressText">0 / 0 · 0%</strong></div><progress id="segmentationProgress" max="1" value="0" aria-label="分割处理进度"></progress><small id="segmentationDetail">已生成 0 · 失败 0 · 待处理 0</small><div class="sidebarProgressLine"><span>掩码复核</span><strong id="reviewProgressText">0 / 0 · 0%</strong></div><progress id="maskReviewProgress" max="1" value="0" aria-label="掩码确认进度"></progress><small id="reviewListSummary">显示 0 次采集</small></section><div id="list"></div><small>筛选记录保存在当前成果目录；原始数据只读。</small></aside>
 <main>
 <div class="editorControls">
 <div class="caption"><div class="frameIdentity"><div id="title">选择一张底图</div><small id="capture"></small></div><div class="frameNavigation"><small id="reviewInputMode"></small> <button id="prev">上一张</button> <button id="next">下一张</button></div></div>
@@ -103,11 +125,17 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 <details class="reviewHelp"><summary>躯干标注说明</summary><div class="hint">目标是<strong>可见躯干</strong>。去掉头、耳、尾、腿和背景；遮挡处沿可见边界描画，不补出被挡住的身体。<span id="inputReviewHint">当前在红外底图上修正掩码，RGB 仅作部位参考。</span></div></details>
 <div class="preview"><button id="rgbBtn" title="放大 RGB 参考图"><img id="rgb" alt="RGB 参考"><small id="referenceLabel">RGB 参考 ↗</small></button><button id="depthBtn" title="放大深度预览"><img id="depth" alt="深度预览"><small id="depthLabel">深度预览 ↗</small></button></div></section>
 <section class="reviewSection"><div class="sectionTitle">当前结果</div><div id="stats">—</div><details id="warningDetails" class="reviewWarnings" hidden><summary id="warningSummary">复核提醒</summary><div id="warn"></div></details></section>
-<label class="headField">图中的头侧方向<select id="head"><option value="unknown">尚未记录</option><option value="left">左侧</option><option value="right">右侧</option><option value="up">上侧</option><option value="down">下侧</option></select></label>
+<fieldset id="head" class="headField"><legend>图中的头侧方向</legend><div class="headOptions">
+<label><input type="radio" name="headSide" value="unknown" checked><span>尚未记录</span></label>
+<label><input type="radio" name="headSide" value="left"><span>左侧</span></label>
+<label><input type="radio" name="headSide" value="right"><span>右侧</span></label>
+<label><input type="radio" name="headSide" value="up"><span>上侧</span></label>
+<label><input type="radio" name="headSide" value="down"><span>下侧</span></label>
+</div></fieldset>
 <label>备注<textarea id="notes" placeholder="如：尾根待修、左侧被栏杆遮挡"></textarea></label>
 <section class="reviewSection"><div class="sectionHeading"><div class="sectionTitle">成果筛选</div><div id="decisionState">未筛选</div></div><div class="decisionButtons"><button id="keepResult">保留</button><button id="rejectResult">淘汰</button><button id="unsureResult">待定</button></div><small class="decisionHelp">淘汰请写备注；筛选与掩码确认分别记录。</small></section>
 <div class="restoreActions"><button id="restore">恢复自动初稿到画布</button><button id="generate">生成 GrabCut 初稿</button></div>
-<div class="saveGroup"><small>确认前检查躯干边界、头尾截断与复核提醒。</small><button id="save">保存修正，稍后确认</button><button id="approve" class="primary">确认合格并保存</button></div>
+<div class="saveGroup"><small>确认前检查躯干边界、头尾截断与复核提醒。</small><button id="save">保存修正，稍后确认</button><label class="autoAdvanceOption"><input id="autoNextPig" type="checkbox">确认保存后自动切换下一张</label><button id="approve" class="primary" title="保存当前采集；勾选上方选项后自动切换到当前列表的下一张">确认合格并保存</button></div>
 </aside></div>
 <dialog id="previewDialog"><button id="closePreview" style="float:right">关闭</button><img id="largePreview" alt="放大参考图"></dialog>
 <dialog id="exportDialog"><div class="caption"><strong>导出筛选后的分割成果</strong><button id="exportClose">关闭</button></div>
@@ -116,7 +144,7 @@ header>.headerIdentity{flex:1;min-width:0}#source{max-width:100%}header>.headerA
 <div id="exportSummary"></div>
 <label>导出到<div class="folderField"><input id="exportParent" placeholder="选择导出成果的保存位置"><button id="chooseExportParent">选择文件夹</button></div></label>
 <label>新建导出文件夹名<input id="exportName" placeholder="例如：itof_筛选保留_20261118"></label>
-</div><small>复制所选采集的掩码、叠加图、复核记录及修订历史，并生成筛选 CSV。导出目录可重新打开复核；原始红外、深度和 RGB 仍从原始目录读取。导出期间暂停编辑。</small>
+</div><small>复制所选采集的掩码、叠加图、复核记录及修订历史，并生成筛选 CSV，同时附带当前成果全部分割失败记录（含原因，不受导出筛选范围限制）。导出目录可重新打开复核；原始红外、深度和 RGB 仍从原始目录读取。导出期间暂停编辑。</small>
 <div id="exportProgress" role="status"></div><div id="exportMessage" role="alert"></div><div class="exportActions"><button id="exportStart" class="primary">开始导出</button></div></dialog>
 <dialog id="directoryDialog"><div class="caption"><strong id="directoryTitle">选择文件夹</strong><button id="directoryCancel">关闭</button></div><div class="folderField" style="margin-top:14px"><input id="directoryPath" aria-label="文件夹路径" placeholder="粘贴完整路径，或逐级打开文件夹"><button id="directoryGo">前往</button><button id="directoryUp">上一级</button></div><div id="directoryInfo"></div><div id="directoryError" role="alert"></div><div id="directoryList"></div><button id="directoryUse" class="primary">使用此文件夹</button></dialog>
 <script>
@@ -131,8 +159,77 @@ function imageURL(id,kind){return '/api/image?id='+encodeURIComponent(id)+'&kind
 function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('图片读取失败'));img.src=url})}
 const names={pending:'未生成',draft:'待复核',corrected:'待确认',reviewed:'已确认'};
 const decisionNames={pending:'未筛选',keep:'已保留',reject:'已淘汰',unsure:'待定'};
-function visibleRows(){const term=$('search').value.trim().toLowerCase(),filter=$('filter').value;return state.rows.filter(r=>(filter==='all'||(filter.startsWith('decision:')?(r.decision||'pending')===filter.split(':')[1]:r.status===filter))&&(r.pig_id+' '+r.capture_id).toLowerCase().includes(term))}
-function renderList(){const frag=document.createDocumentFragment(),rows=visibleRows();for(const r of rows){const b=document.createElement('button');b.className='frame'+(r.id===state.current?.id?' current':'');b.dataset.id=r.id;const line=document.createElement('span');line.className='line';const label=document.createElement('span');label.textContent='耳标 '+r.pig_id;const status=document.createElement('span');status.textContent=(r.decision&&r.decision!=='pending'?decisionNames[r.decision]+' · ':'')+(names[r.status]||'未生成');status.className='pill '+r.status;line.append(label,status);const sub=document.createElement('small');sub.textContent=r.capture_id;b.append(line,sub);b.onclick=()=>openFrame(r);frag.append(b)}$('list').replaceChildren(frag);const reviewed=state.rows.filter(r=>r.reviewed).length,kept=state.rows.filter(r=>r.decision==='keep').length;$('counts').textContent=`${new Set(state.rows.map(r=>r.pig_id)).size} 头猪 · ${state.rows.length} 次采集\n保留 ${kept} · 掩码已确认 ${reviewed}`}
+let selectedCamera='all';
+const cameraNames={all:'全部相机',itof:'iToF',stereo:'双目',unknown:'相机未识别'};
+function cameraType(row){
+  if(['itof','stereo'].includes(row.camera_type))return row.camera_type;
+  // Relative paths take priority over enclosing folders on the local computer.
+  for(const path of [row.relative_dir,row.source_dir]){
+    const parts=String(path||'').split(/[\\/]+/).reverse();
+    for(const part of parts){
+      if(/双目|(^|[^a-z])(stereo|binocular|gemini)(?=$|[^a-z])/i.test(part))return 'stereo';
+      if(/(^|[^a-z])(itof|i-tof|femto)(?=$|[^a-z])/i.test(part))return 'itof';
+    }
+  }
+  return 'unknown';
+}
+function cameraRows(){return state.rows.filter(row=>selectedCamera==='all'||cameraType(row)===selectedCamera)}
+function visibleRows(){
+  const term=$('search').value.trim().toLowerCase(),filter=$('filter').value;
+  return cameraRows().filter(r=>(filter==='all'||(filter.startsWith('decision:')?(r.decision||'pending')===filter.split(':')[1]:r.status===filter))&&
+    (r.pig_id+' '+r.capture_id+' '+cameraNames[cameraType(r)]).toLowerCase().includes(term));
+}
+function renderSidebarProgress(){
+  const rows=cameraRows(),total=rows.length;
+  // Only errors from the current result directory belong in its progress.
+  const job=currentJob&&currentJob.output===workspaceData?.output?currentJob:null;
+  const errors=new Set((job?.errors||[]).map(e=>e.relative_dir));
+  const generatedStatuses=new Set(['draft','corrected','reviewed']);
+  const generated=rows.filter(r=>generatedStatuses.has(r.status));
+  const failed=rows.filter(r=>!generatedStatuses.has(r.status)&&(r.status==='failed'||errors.has(r.relative_dir))).length;
+  const processed=generated.length+failed,reviewed=generated.filter(r=>r.reviewed).length;
+  const percent=(done,count)=>count?(100*done/count).toFixed(1).replace(/\.0$/,''):'0';
+  $('segmentationProgress').max=Math.max(1,total);$('segmentationProgress').value=processed;
+  $('segmentationProgressText').textContent=`${processed} / ${total} · ${percent(processed,total)}%`;
+  const running=jobRunning(job)?' · 正在分割':job&&['stopped','interrupted','failed'].includes(job.status)?' · 已暂停':'';
+  $('segmentationDetail').textContent=`已生成 ${generated.length} · 失败 ${failed} · 待处理 ${total-processed}${running}`;
+  $('maskReviewProgress').max=Math.max(1,generated.length);$('maskReviewProgress').value=reviewed;
+  $('reviewProgressText').textContent=`${reviewed} / ${generated.length} · ${percent(reviewed,generated.length)}%`;
+  $('reviewListSummary').textContent=`${cameraNames[selectedCamera]} · 显示 ${visibleRows().length} / ${total} 次`;
+}
+function renderList(){
+  const counts={all:state.rows.length,itof:0,stereo:0,unknown:0};
+  for(const row of state.rows)counts[cameraType(row)]++;
+  for(const [key,id]of Object.entries({all:'cameraCountAll',itof:'cameraCountItof',stereo:'cameraCountStereo',unknown:'cameraCountUnknown'}))$(id).textContent=counts[key];
+  for(const button of $('cameraFilters').querySelectorAll('button')){
+    button.setAttribute('aria-pressed',String(button.dataset.camera===selectedCamera));
+    if(button.dataset.camera==='unknown')button.hidden=!counts.unknown;
+  }
+  const frag=document.createDocumentFragment(),rows=visibleRows();
+  for(const r of rows){
+    const type=cameraType(r),b=document.createElement('button');
+    b.className='frame'+(r.id===state.current?.id?' current':'');b.dataset.id=r.id;b.dataset.camera=type;
+    const line=document.createElement('span');line.className='line';
+    const label=document.createElement('span');label.textContent='耳标 '+r.pig_id;
+    const status=document.createElement('span');
+    status.textContent=(r.decision&&r.decision!=='pending'?decisionNames[r.decision]+' · ':'')+(names[r.status]||'未生成');
+    status.className='pill '+r.status;line.append(label,status);
+    const sub=document.createElement('span');sub.className='captureLine';
+    const badge=document.createElement('span');badge.className='cameraBadge '+type;badge.textContent=cameraNames[type];
+    const time=document.createElement('small');time.textContent=r.capture_id;time.title=r.capture_id;
+    sub.append(badge,time);b.append(line,sub);b.onclick=()=>openFrame(r);frag.append(b);
+  }
+  if(!rows.length){const empty=document.createElement('small');empty.className='listEmpty';empty.textContent='没有符合当前相机、状态和搜索条件的采集。';frag.append(empty)}
+  $('list').replaceChildren(frag);
+  const reviewed=state.rows.filter(r=>r.reviewed).length,kept=state.rows.filter(r=>r.decision==='keep').length;
+  $('counts').textContent=`${new Set(state.rows.map(r=>r.pig_id)).size} 头猪 · ${state.rows.length} 次采集\n保留 ${kept} · 掩码已确认 ${reviewed}`;
+  renderSidebarProgress();
+}
+$('cameraFilters').onclick=event=>{
+  const button=event.target.closest('button[data-camera]');if(!button)return;
+  selectedCamera=button.dataset.camera;renderList();
+};
+
 function fit(){if(!state.meta)return;const w=state.meta.width,h=state.meta.height,z=$('zoom').value;const s=z==='fit'?Math.min(($('viewport').clientWidth-12)/w,($('viewport').clientHeight-12)/h):Number(z);$('stage').style.width=w*s+'px';$('stage').style.height=h*s+'px'}
 new ResizeObserver(fit).observe($('viewport'));$('zoom').onchange=fit;
 function render(){renderPending=false;if(!state.meta)return;const w=$('mask').width,h=$('mask').height;pc.clearRect(0,0,w,h);if(state.view==='binary'){pc.drawImage($('mask'),0,0)}else if(state.view==='overlay'){const bits=mc.getImageData(0,0,w,h),out=pc.createImageData(w,h),a=Number($('opacity').value)*2.55;for(let i=0;i<bits.data.length;i+=4){if(bits.data[i]>127){out.data[i]=49;out.data[i+1]=229;out.data[i+2]=170;out.data[i+3]=a}}pc.putImageData(out,0,0)}if(state.points.length){pc.strokeStyle='#ffcf72';pc.lineWidth=2;pc.beginPath();state.points.forEach((p,i)=>i?pc.lineTo(p.x,p.y):pc.moveTo(p.x,p.y));pc.stroke();for(const p of state.points){pc.fillStyle='#ffcf72';pc.beginPath();pc.arc(p.x,p.y,3,0,Math.PI*2);pc.fill()}}drawSamPrompts()}
@@ -159,10 +256,15 @@ function readStats(meta){
     $(id).classList.toggle('selected',meta.decision===value);$(id).disabled=locked||meta.status==='pending';
   }
 }
+function headSide(){return $('head').querySelector('input:checked').value}
+function setHeadSide(value){
+  const options=Array.from($('head').querySelectorAll('input'));
+  (options.find(input=>input.value===value)||options[0]).checked=true;
+}
 function controls(disabled){
   state.busy=disabled;
-  for(const id of ['prev','next','save','approve','restore','generate','samPredict','samClear','keepResult','rejectResult','unsureResult'])$(id).disabled=disabled||!state.meta||state.exportActive||(state.jobActive&&!['prev','next'].includes(id));
-  for(const id of ['head','notes'])$(id).disabled=disabled||state.jobActive||state.exportActive;
+  for(const id of ['prev','next','save','approve','autoNextPig','restore','generate','samPredict','samClear','keepResult','rejectResult','unsureResult'])$(id).disabled=disabled||!state.meta||state.exportActive||(state.jobActive&&!['prev','next'].includes(id));
+  for(const id of ['head','notes'])$(id).disabled=disabled||!state.meta||state.jobActive||state.exportActive;
   if(!disabled&&state.meta)readStats(state.meta);
   if(state.meta?.geometry_legacy)for(const id of ['save','approve','generate','restore','samPredict','samClear'])$(id).disabled=true;
 }
@@ -199,8 +301,8 @@ async function openFrame(row){
     state.current=row;state.meta=meta;state.dirty=false;state.points=[];state.samPoints=[];state.samBox=null;state.samPredictionId=null;promptCount();state.undo=[];state.redo=[];
     for(const id of ['base','paint','mask']){$(id).width=meta.width;$(id).height=meta.height}
     bc.drawImage(base,0,0);mc.drawImage(mask,0,0);
-    $('title').textContent='耳标 '+row.pig_id;$('capture').textContent=row.capture_id+' · '+(meta.input_mode==='rgb'?'RGB':'红外')+' · '+meta.width+'×'+meta.height;
-    $('head').value=meta.head_side||'unknown';$('notes').value=meta.notes||'';
+    $('title').textContent='耳标 '+row.pig_id;$('capture').textContent=row.capture_id+' · '+cameraNames[cameraType(row)]+' · '+(meta.input_mode==='rgb'?'RGB':'红外')+' · '+meta.width+'×'+meta.height;
+    setHeadSide(meta.head_side);$('notes').value=meta.notes||'';
     reviewInputUI(meta);readStats(meta);renderList();fit();render();
     message('鼠标拖动补画或擦除；多边形点击添加顶点，回车闭合，Esc 取消。');
   }catch(e){message(e.message,true)}finally{controls(false)}
@@ -224,7 +326,35 @@ $('undo').onclick=undo;$('redo').onclick=redo;
 $('brush').oninput=()=>{$('brushLabel').textContent=$('brush').value};$('opacity').oninput=schedule;
 $('head').onchange=()=>{if(state.meta)dirty()};$('notes').oninput=()=>{if(state.meta)dirty()};
 function binaryPNG(){const data=mc.getImageData(0,0,$('mask').width,$('mask').height);for(let i=0;i<data.data.length;i+=4){const v=data.data[i]>127?255:0;data.data[i]=data.data[i+1]=data.data[i+2]=v;data.data[i+3]=255}mc.putImageData(data,0,0);return $('mask').toDataURL('image/png')}
-async function save(reviewed){if(!state.current||state.busy)return;if(state.points.length){message('请先闭合多边形，或按 Esc 取消后再保存。',true);return}if(reviewed&&$('head').value==='unknown'){message('请先记录头侧方向，再确认合格。',true);$('head').focus();return}controls(true);try{const meta=await api('/api/save',{id:state.current.id,revision:state.meta.revision||0,mask:binaryPNG(),reviewed,head_side:$('head').value,notes:$('notes').value,sam_prediction_id:state.samPredictionId});state.meta={...state.meta,...meta};Object.assign(state.current,{status:meta.status,reviewed:meta.reviewed,revision:meta.revision});state.dirty=false;$('title').textContent='耳标 '+state.current.pig_id;readStats(meta);renderList();render();message(reviewed?'已确认合格，已保存 trunk_mask.png 和叠加预览。':'修正进度已保存，尚未标记为合格。')}catch(e){message(e.message,true)}finally{controls(false)}}
+async function save(reviewed){
+  if(!state.current||state.busy)return;
+  if(state.points.length){message('请先闭合多边形，或按 Esc 取消后再保存。',true);return}
+  if(reviewed&&headSide()==='unknown'){message('请先记录头侧方向，再确认合格。',true);$('head').querySelector('input:checked').focus();return}
+  const autoNext=reviewed&&$('autoNextPig').checked;
+  const current=state.current,rows=autoNext?visibleRows():[];
+  // Snapshot the next capture before saving: approval may remove this row from a filter.
+  const index=rows.findIndex(row=>row.id===current.id);
+  const next=autoNext&&index>=0?rows[index+1]:null;
+  let saved=false;
+  controls(true);
+  try{
+    const meta=await api('/api/save',{id:current.id,revision:state.meta.revision||0,mask:binaryPNG(),reviewed,head_side:headSide(),notes:$('notes').value,sam_prediction_id:state.samPredictionId});
+    state.meta={...state.meta,...meta};
+    Object.assign(current,{status:meta.status,reviewed:meta.reviewed,revision:meta.revision});
+    state.dirty=false;$('title').textContent='耳标 '+current.pig_id;
+    readStats(meta);renderList();render();saved=true;
+    message(reviewed?'已确认合格，已保存 trunk_mask.png 和叠加预览。':'修正进度已保存，尚未标记为合格。');
+  }catch(e){message(e.message,true)}finally{controls(false)}
+  if(!autoNext||!saved)return;
+  if(!next){message('已确认并保存。当前列表已到最后一张。');return}
+  await openFrame(next);
+  if(state.current?.id===next.id){
+    $('list').querySelector('.frame.current')?.scrollIntoView({block:'nearest'});
+    message('已确认并保存当前采集，已切换到下一张：耳标 '+next.pig_id+' · '+next.capture_id+'。');
+  }
+}
+try{$('autoNextPig').checked=localStorage.getItem('reviewAutoNextPig')==='true'}catch{}
+$('autoNextPig').onchange=()=>{try{localStorage.setItem('reviewAutoNextPig',String($('autoNextPig').checked))}catch{}};
 $('save').onclick=()=>save(false);$('approve').onclick=()=>save(true);
 $('restore').onclick=async()=>{if(!state.current||state.busy)return;controls(true);try{const im=await loadImage(imageURL(state.current.id,'draft'));snapshot();mc.drawImage(im,0,0);state.points=[];dirty();message('已载入自动初稿；当前保存结果尚未改变，可撤销。')}catch(e){message(e.message,true)}finally{controls(false)}};
 $('generate').onclick=async()=>{if(!state.current||state.busy)return;const row=state.current;controls(true);try{const meta=await api('/api/generate',{id:row.id});Object.assign(row,{status:meta.status,reviewed:false});state.dirty=false;controls(false);await openFrame(row)}catch(e){message(e.message,true)}finally{controls(false)}};

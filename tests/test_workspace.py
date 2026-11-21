@@ -141,6 +141,73 @@ class BrowserWorkflowTests(unittest.TestCase):
         self.assertEqual(restored.dataset.source,self.source.resolve())
         self.assertEqual(restored.startup_warning,'')
 
+    def moved_result(self,recorded):
+        import shutil
+        source=self.parent/'11-10筛选结果'/'筛选_20261119'/'selected'
+        folder=source/'pig_7'/'capture_1'
+        folder.parent.mkdir(parents=True)
+        shutil.copytree(self.folder,folder)
+        result=self.result(name='moved')
+        data=json.loads((result/'dataset.json').read_text(encoding='utf-8'))
+        data['source']=recorded
+        # Keep foreign absolute paths and IDs as they appear in copied results.
+        data['frames'][0]['source_dir']=recorded+'/pig_7/capture_1'
+        data['frames'][0]['id']='original-frame-id'
+        atomic_json(result/'dataset.json',data)
+        return result,source
+
+    def test_copied_results_find_local_source_for_mac_and_windows_paths(self):
+        for recorded in ['/Users/other/11-10筛选结果/筛选_20261119/selected',
+                         r'Z:\other\11-10筛选结果\筛选_20261119\selected']:
+            with self.subTest(recorded=recorded),tempfile.TemporaryDirectory() as tmp:
+                # Separate local trees for each platform's recorded path.
+                original_parent=self.parent
+                self.parent=Path(tmp)/'outputs';self.parent.mkdir()
+                try:
+                    result,source=self.moved_result(recorded)
+                    before=(result/'dataset.json').read_bytes()
+                    listing=self.manager.open_results(str(result))
+                    self.assertEqual(listing['source'],str(source.resolve()))
+                    self.assertEqual(listing['frames'][0]['id'],'original-frame-id')
+                    self.assertEqual(listing['frames'][0]['source_dir'],str(source/'pig_7'/'capture_1'))
+                    self.assertEqual((result/'dataset.json').read_bytes(),before)
+                    restored=Workspace(self.manager.state_dir)
+                    self.assertEqual(restored.dataset.source,source.resolve())
+                    self.assertEqual(restored.startup_warning,'')
+                finally:
+                    self.parent=original_parent
+
+    def test_copied_results_do_not_guess_between_matching_sources(self):
+        import shutil
+        result,source=self.moved_result('/Users/other/11-10筛选结果/筛选_20261119/selected')
+        shutil.copytree(source,self.parent/'selected')
+        with self.assertRaisesRegex(ValueError,'多个.*新原始目录'):
+            self.manager.open_results(str(result))
+        self.assertIsNone(self.manager.dataset)
+        self.assertFalse(self.manager.settings_file.exists())
+        listing=self.manager.open_results(str(result),source_override=str(source))
+        self.assertEqual(listing['source'],str(source.resolve()))
+
+    def test_copied_results_need_every_manifest_capture_and_respect_override(self):
+        result,source=self.moved_result('/Users/other/11-10筛选结果/筛选_20261119/selected')
+        with self.assertRaisesRegex(ValueError,'文件夹不存在'):
+            self.manager.open_results(str(result),source_override=str(self.root/'missing'))
+        path=result/'dataset.json';data=json.loads(path.read_text(encoding='utf-8'))
+        data['frames'].append({**data['frames'][0],'id':'missing','relative_dir':'pig_8/missing'})
+        atomic_json(path,data)
+        with self.assertRaisesRegex(ValueError,'原始目录不存在.*新原始目录'):
+            self.manager.open_results(str(result))
+        self.assertIsNone(self.manager.dataset)
+
+    def test_copied_results_reject_unsafe_paths_before_source_search(self):
+        result,source=self.moved_result('/Users/other/11-10筛选结果/筛选_20261119/selected')
+        path=result/'dataset.json';data=json.loads(path.read_text(encoding='utf-8'))
+        for rel in ['../escape',r'..\escape','/absolute',r'C:\absolute',r'C:relative']:
+            with self.subTest(rel=rel):
+                data['frames'][0]['relative_dir']=rel;atomic_json(path,data)
+                with self.assertRaisesRegex(ValueError,'相对路径'):
+                    self.manager.open_results(str(result))
+
     def export(self, name='filtered', **kw):
         result=self.manager.start_export({'dataset_id':self.manager.dataset.dataset_id,
                                          'parent':str(self.parent),'name':name,'scope':'keep',**kw})
@@ -192,7 +259,12 @@ class BrowserWorkflowTests(unittest.TestCase):
     def test_export_failure_cleans_partial_copy_and_does_not_follow_symlinks(self):
         self.start();self.manager.worker.join(timeout=10)
         d=self.manager.dataset;row=d.rows[0]
-        (d.dest(row)/'escape').symlink_to(self.source,target_is_directory=True)
+        try:
+            (d.dest(row)/'escape').symlink_to(self.source,target_is_directory=True)
+        except OSError as error:
+            if getattr(error,'winerror',None)==1314:
+                self.skipTest('Windows 未授予创建符号链接权限；另有模拟链接导出保护测试')
+            raise
         target,_=self.export(scope='all')
         self.assertEqual(self.manager.export_job['status'],'failed')
         self.assertIn('符号链接',self.manager.export_job['error'])

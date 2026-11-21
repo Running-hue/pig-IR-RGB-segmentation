@@ -40,12 +40,12 @@ function resetEditor(){
   state.current=null;state.meta=null;state.dirty=false;state.points=[];state.samPoints=[];
   state.samBox=null;state.samStart=null;state.samPredictionId=null;state.undo=[];state.redo=[];
   for(const [canvas,ctx]of [[$('base'),bc],[$('paint'),pc],[$('mask'),mc]])ctx.clearRect(0,0,canvas.width,canvas.height);
-  $('title').textContent='选择一张底图';$('capture').textContent='';$('notes').value='';
+  $('title').textContent='选择一张底图';$('capture').textContent='';setHeadSide('unknown');$('notes').value='';
   $('geometryNote').textContent='';
 }
 async function adoptWorkspace(data,{loadFirst=true}={}){
   const changed=state.datasetId!==data.dataset_id;
-  if(changed)resetEditor();
+  if(changed){resetEditor();selectedCamera='all'}
   workspaceData=data;state.datasetId=data.dataset_id;state.rows=data.frames||[];
   $('samTools').hidden=!data.sam_ready;$('generate').hidden=data.backend==='sam2'||data.input_mode==='rgb';
   $('source').textContent=data.output?'当前成果（'+(data.input_mode==='rgb'?'RGB':'红外')+'）：'+data.output:'尚未打开成果目录';
@@ -90,6 +90,7 @@ function showJob(job){
     if(job.error)errors.unshift(job.error);
     $('jobErrorDetails').hidden=!errors.length;$('jobErrors').textContent=errors.join('\n');
   }
+  renderSidebarProgress();
   setFlowBusy(flowBusy);controls(state.busy);
 }
 async function browseDirectory(path){
@@ -168,8 +169,10 @@ $('startBatch').onclick=async()=>{
 $('loadResults').onclick=async()=>{
   if(state.busy||!allowDirectoryChange())return;
   setFlowBusy(true);flowMessage('正在载入成果…');
-  try{const d=await api('/api/open_results',{output:$('resultFolder').value,source_override:$('resultSource').value||null});state.dirty=false;await adoptWorkspace(d);$('workflow').hidden=true}
+  let opened=false;
+  try{const d=await api('/api/open_results',{output:$('resultFolder').value,source_override:$('resultSource').value||null});state.dirty=false;await adoptWorkspace(d);opened=true}
   catch(e){flowMessage(e.message,true)}finally{setFlowBusy(false)}
+  if(opened)setMode('review');
 };
 $('stopBatch').onclick=async()=>{try{const d=await api('/api/batch/stop',{job_id:currentJob.id});showJob(d.job)}catch(e){message(e.message,true)}};
 $('enterReview').onclick=async()=>{
@@ -190,8 +193,12 @@ $('keepResult').onclick=()=>decideResult('keep');$('rejectResult').onclick=()=>d
 async function pollJob(){
   if(polling)return;polling=true;
   try{
-    const d=await api('/api/job');const wasActive=state.jobActive;showJob(d.job);showExportJob(d.export_job);
+    const d=await api('/api/job');const wasActive=state.jobActive,previousDone=workspaceData?.job?.done;showJob(d.job);showExportJob(d.export_job);
     if(wasActive&&!state.jobActive){await adoptWorkspace(await api('/api/captures'));$('workflow').hidden=true;message('任务已结束。请复核分割边界，并记录保留、淘汰或待定。')}
+    else if(state.jobActive&&d.job?.done!==previousDone){
+      const data=await api('/api/captures');
+      if(data.dataset_id===state.datasetId){workspaceData=data;state.rows=data.frames||[];renderList()}
+    }
   }catch(e){if(currentJob)$('jobText').textContent='暂时无法连接本机服务；恢复后自动更新。'+e.message}
   finally{polling=false}
 }
@@ -200,7 +207,7 @@ function exportRows(){
   return state.rows.filter(row=>row.status&&row.status!=='pending'&&(scope==='all'||(scope==='keep_reviewed'&&row.decision==='keep'&&row.reviewed)||(row.decision||'pending')===scope));
 }
 function updateExportForm(){
-  const rows=exportRows();$('exportSummary').textContent=`将导出 ${new Set(rows.map(r=>r.pig_id)).size} 头猪 · ${rows.length} 次采集`;
+  const rows=exportRows(),failed=workspaceData?.segmentation_failures?.length||0;$('exportSummary').textContent=`将导出 ${new Set(rows.map(r=>r.pig_id)).size} 头猪 · ${rows.length} 次采集 · 附带 ${failed} 条分割失败记录`;
   const locked=state.exportActive||flowBusy||directorySelecting||state.jobActive;
   for(const id of ['exportScope','exportParent','exportName','chooseExportParent'])$(id).disabled=locked;
   $('exportClose').disabled=locked;
@@ -211,7 +218,7 @@ function showExportJob(job){
   const progress=$('exportProgress');
   if(job){
     const label={running:'正在导出',completed:'导出完成',failed:'导出失败'}[job.status]||job.status;
-    progress.textContent=`${label} · ${job.done} / ${job.total}\n${job.output}`+(job.error?'\n'+job.error:'')+(job.warning?'\n'+job.warning:'');
+    progress.textContent=`${label} · ${job.done} / ${job.total}\n${job.output}`+(job.error?'\n'+job.error:'')+(job.warning?'\n'+job.warning:'')+(job.segmentation_failed?'\n附带 '+job.segmentation_failed+' 条分割失败记录':'');
   }else progress.textContent='';
   if(state.exportActive&&!$('exportDialog').open)$('exportDialog').showModal();
   setFlowBusy(flowBusy);controls(state.busy);updateExportForm();

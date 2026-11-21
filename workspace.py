@@ -5,7 +5,8 @@ import copy
 import csv
 import io
 import json
-from pathlib import Path
+import re
+from pathlib import Path, PureWindowsPath
 import secrets
 import shutil
 import tempfile
@@ -68,7 +69,7 @@ class Workspace:
         self.stop_event=threading.Event()
         if self.settings_file.is_file():
             try:
-                self.settings=json.loads(self.settings_file.read_text())
+                self.settings=json.loads(self.settings_file.read_text(encoding='utf-8'))
             except (OSError,ValueError):
                 self.startup_warning='上次目录记录无法读取，请重新选择成果目录'
         candidate=initial_output or self.settings.get('last_output')
@@ -103,6 +104,7 @@ class Workspace:
                 'frames':[],'pigs':0,'source':None,'output':None,'dataset_id':None,
                 'backend':'sam2','sam_ready':ready()}
             return {**data,'job':copy.deepcopy(self.job),'export_job':copy.deepcopy(self.export_job),
+                    'segmentation_failures':self.segmentation_failures(self.dataset) if self.dataset else [],
                     'native_picker':supported(),'startup_warning':self.startup_warning,
                     'last_export_parent':self.settings.get('last_export_parent',''),
                     'last_source':self.settings.get('last_source',''),
@@ -135,22 +137,62 @@ class Workspace:
         return {'source':str(source),'input_mode':mode,'frames':len(rows),'pigs':len({r['pig_id'] for r in rows}),
                 'geometry_checked':mode=='rgb'}
 
+    def _results_source(self, output, recorded, saved, mode, override):
+        if override:
+            return directory(override)
+        remembered=self.settings.get('source_overrides',{}).get(str(output))
+        for value in (remembered,recorded):
+            if isinstance(value,str) and value.strip() and Path(value).expanduser().is_dir():
+                return directory(value)
+        # A copied dataset often keeps its last few folder names. Check only
+        # nearby paths with those exact names, never scan entire drives.
+        parts=PureWindowsPath(recorded).parts if isinstance(recorded,str) else ()
+        candidates=set()
+        for parent in (output.parent,output.parent.parent):
+            for count in range(1,min(4,len(parts))+1):
+                suffix=parts[-count:]
+                if any(part in {'.','..'} or '/' in part or '\\' in part or ':' in part for part in suffix):
+                    continue
+                candidate=parent.joinpath(*suffix).resolve()
+                if not candidate.is_dir():
+                    continue
+                try:
+                    validate_output(candidate,output)
+                except ValueError:
+                    continue
+                candidates.add(candidate)
+        matches=[]
+        for candidate in sorted(candidates):
+            available={row['relative_dir'] for row in discover(candidate,mode)}
+            if all(entry['relative_dir'] in available for entry in saved):
+                matches.append(candidate)
+        if len(matches)==1:
+            return matches[0]
+        if matches:
+            raise ValueError('找到多个可能的原始目录，请在“新原始目录”中明确选择后重新载入')
+        raise ValueError(f'成果记录的原始目录不存在：{recorded}；请在“新原始目录”中选择本机原始数据根目录，保持原相对层级')
+
     def open_results(self, value, source_override=None, remember=True):
         from app import Dataset
         output=directory(value)
         manifest=output/'dataset.json'
         if not manifest.is_file():
             raise ValueError('该目录没有 dataset.json，请选择分割成果的根目录，而不是某头猪或某次采集目录')
-        data=json.loads(manifest.read_text())
+        data=json.loads(manifest.read_text(encoding='utf-8'))
         mode=input_mode(data.get('input_mode','infrared'))
-        source=directory(source_override or self.settings.get('source_overrides',{}).get(str(output)) or data['source'])
+        saved=data.get('frames')
+        if not isinstance(saved,list) or not saved:
+            raise ValueError('成果清单中没有采集记录')
+        for entry in saved:
+            rel=entry['relative_dir']
+            if (not isinstance(rel,str) or not rel or PureWindowsPath(rel).drive
+                    or PureWindowsPath(rel).root or '\\' in rel or '..' in Path(rel).parts):
+                raise ValueError('成果清单包含无效的采集相对路径')
+        source=self._results_source(output,data.get('source'),saved,mode,source_override)
         source,output=validate_output(source,output)
         if self.state_dir==source or source in self.state_dir.parents or self.state_dir in source.parents:
             raise ValueError('原始目录与工作台进度目录必须相互独立')
         available={r['relative_dir']:r for r in discover(source,mode)}
-        saved=data.get('frames')
-        if not isinstance(saved,list) or not saved:
-            raise ValueError('成果清单中没有采集记录')
         rows=[]
         ids=set()
         for entry in saved:
@@ -172,7 +214,7 @@ class Workspace:
             self.job=None
             job_file=output/'batch_job.json'
             if job_file.is_file():
-                saved_job=json.loads(job_file.read_text())
+                saved_job=json.loads(job_file.read_text(encoding='utf-8'))
                 if saved_job.get('status') in {'running','stopping'}:
                     saved_job.update(status='interrupted',current='上次服务已结束；已完成成果保留。未完成采集可在工作台逐张分割，或新建任务。')
                 saved_job.update(output=str(output),source=str(source))
@@ -180,7 +222,7 @@ class Workspace:
             self.startup_warning=''
             if remember:
                 self.settings.update(last_output=str(output),last_source=str(source))
-                if source_override:
+                if source_override or str(source)!=data.get('source'):
                     self.settings.setdefault('source_overrides',{})[str(output)]=str(source)
                 self._remember()
             return self.listing()
@@ -289,6 +331,59 @@ class Workspace:
                 self.job['current']='正在停止，当前一张处理完成后结束'
             return copy.deepcopy(self.job)
 
+    def segmentation_failures(self, dataset):
+        """Collect unresolved errors, including records carried by filtered exports."""
+        manifest_file=dataset.output/'dataset.json'
+        manifest=json.loads(manifest_file.read_text(encoding='utf-8')) if manifest_file.is_file() else {}
+        reports=[(manifest.get('segmentation_failures',[]),True)]
+        for name in ['summary.json','batch_job.json']:
+            path=dataset.output/name
+            if path.is_file():
+                report=json.loads(path.read_text(encoding='utf-8'))
+                reports.append((report.get('errors',[]),False))
+        if self.job and self.job.get('output')==str(dataset.output):
+            reports.append((self.job.get('errors',[]),False))
+        known={row['relative_dir']:row for row in dataset.rows}
+        failures={}
+        for entries,archived in reports:
+            if not isinstance(entries,list):
+                raise ValueError('成果中的分割失败记录格式不正确')
+            for entry in entries:
+                if not isinstance(entry,dict):
+                    raise ValueError('成果中的分割失败记录格式不正确')
+                rel=entry.get('relative_dir')
+                if (not isinstance(rel,str) or not rel or PureWindowsPath(rel).drive
+                        or PureWindowsPath(rel).root or '\\' in rel or '..' in Path(rel).parts):
+                    raise ValueError('分割失败记录包含无效的采集相对路径')
+                if rel not in known and not archived:
+                    continue
+                row=known.get(rel)
+                # A manually repaired/generated mask supersedes its old batch failure.
+                if row and dataset.metadata(row).get('status') in {'draft','corrected','reviewed'}:
+                    continue
+                parts=Path(rel).parts
+                row=row or {**entry,'pig_id':entry.get('pig_id') or next(
+                    (part[4:] for part in reversed(parts) if part.startswith('pig_')),'未知'),
+                    'capture_id':entry.get('capture_id') or parts[-1]}
+                failures[rel]={**row,'relative_dir':rel,'source_dir':str(dataset.source/rel),
+                               'status':'failed','reviewed':False,
+                               'camera_type':{'iToF':'itof','双目':'stereo'}.get(self.camera_label(row),'unknown'),
+                               'error':str(entry.get('error') or '分割失败，未记录具体原因')}
+        return list(failures.values())
+
+    @staticmethod
+    def camera_label(row):
+        kind=row.get('camera_type')
+        if kind in {'itof','stereo'}:
+            return {'itof':'iToF','stereo':'双目'}[kind]
+        for value in [row.get('relative_dir'),row.get('source_dir')]:
+            for part in reversed(re.split(r'[\\/]+',str(value or ''))):
+                if re.search(r'双目|(^|[^a-z])(stereo|binocular|gemini)($|[^a-z])',part,re.I):
+                    return '双目'
+                if re.search(r'(^|[^a-z])(itof|i-tof|femto)($|[^a-z])',part,re.I):
+                    return 'iToF'
+        return '未识别'
+
     def start_export(self, payload):
         with self.lock:
             self._idle()
@@ -311,16 +406,17 @@ class Workspace:
                 decision=meta.get('decision','pending')
                 if scope=='all' or (scope=='keep_reviewed' and decision=='keep' and meta.get('reviewed')) or decision==scope:
                     selected.append((copy.deepcopy(row),copy.deepcopy(meta)))
+            failures=copy.deepcopy(self.segmentation_failures(dataset))
             if not selected:
                 raise ValueError('该范围没有可导出的分割成果，请先筛选或调整导出范围')
             self.export_job={'id':secrets.token_hex(8),'dataset_id':dataset.dataset_id,
                              'status':'running','done':0,'total':len(selected),'current':'准备复制分割成果',
-                             'output':str(target),'scope':scope,'started_at':stamp()}
-            self.export_worker=threading.Thread(target=self._export,args=(dataset,target,selected),daemon=False)
+                             'output':str(target),'scope':scope,'segmentation_failed':len(failures),'started_at':stamp()}
+            self.export_worker=threading.Thread(target=self._export,args=(dataset,target,selected,failures),daemon=False)
             self.export_worker.start()
             return {'export_job':copy.deepcopy(self.export_job)}
 
-    def _export(self, dataset, target, selected):
+    def _export(self, dataset, target, selected, failures):
         stage=None
         try:
             stage=Path(tempfile.mkdtemp(prefix='.itof-export-',dir=target.parent))
@@ -340,14 +436,20 @@ class Workspace:
                 with self.lock:
                     self.export_job['done']+=1
                     self.export_job['current']=rel
-            manifest=json.loads((dataset.output/'dataset.json').read_text())
+            manifest=json.loads((dataset.output/'dataset.json').read_text(encoding='utf-8'))
             manifest.update(source=str(dataset.source),output=str(target),frames=[row for row,_ in selected],
-                            created_at=stamp(),workflow='filtered_export',exported_from=str(dataset.output))
+                            created_at=stamp(),workflow='filtered_export',exported_from=str(dataset.output),
+                            segmentation_failures=failures)
             atomic_json(stage/'dataset.json',manifest)
-            atomic_bytes(stage/'筛选记录.csv',self.csv(dataset.dataset_id,rows=[row for row,_ in selected],output=target))
+            atomic_bytes(stage/'筛选记录.csv',self.csv(dataset.dataset_id,rows=[row for row,_ in selected],output=target,failures=failures))
+            atomic_bytes(stage/'分割失败记录.csv',self.csv(dataset.dataset_id,rows=[],output=target,failures=failures))
+            atomic_json(stage/'分割失败记录.json',{'schema_version':1,'failed':len(failures),
+                        'exported_from':str(dataset.output),'source':str(dataset.source),
+                        'created_at':stamp(),'failures':failures})
             atomic_json(stage/'export.json',{**self.export_job,'status':'completed','finished_at':stamp(),
                                             'exported_from':str(dataset.output),'source':str(dataset.source),
-                                            'note':'保留原始数据引用；筛选保留不代表掩码已经确认。'})
+                                            'failure_csv':'分割失败记录.csv','failure_json':'分割失败记录.json',
+                                            'note':'保留原始数据引用；附带当前成果全部未解决的分割失败记录，失败项没有可复制的掩码。筛选保留不代表掩码已经确认。'})
             if target.exists() or target.is_symlink():
                 raise ValueError('导出目录已被创建，请换一个文件夹名后重试')
             stage.rename(target)
@@ -366,16 +468,29 @@ class Workspace:
             if stage is not None:
                 shutil.rmtree(stage,ignore_errors=True)
 
-    def csv(self, dataset_id, rows=None, output=None):
+    def csv(self, dataset_id, rows=None, output=None, failures=None):
         with self.lock:
             dataset=self.require_dataset(dataset_id)
+            failures=self.segmentation_failures(dataset) if failures is None else failures
+            by_rel={entry['relative_dir']:entry for entry in failures}
+            selected=list(dataset.rows if rows is None else rows)
+            present={row['relative_dir'] for row in selected}
+            # Archived failures need not be in the filtered export's editable frame list.
+            selected.extend(entry for entry in failures if entry['relative_dir'] not in present)
             result=io.StringIO()
             writer=csv.writer(result)
-            writer.writerow(['耳标','采集时间','筛选','分割状态','备注','源目录','成果目录','分割输入'])
-            for row in dataset.rows if rows is None else rows:
-                m=dataset.metadata(row)
+            writer.writerow(['耳标','采集时间','筛选','分割状态','备注','源目录','成果目录','分割输入',
+                             '相机类型','采集相对路径','分割失败原因','猪头侧方向'])
+            for row in selected:
+                failure=by_rel.get(row['relative_dir'])
+                m=dataset.metadata(row) if not failure else {}
+                dest='' if failure else str(Path(output)/row['relative_dir'] if output else dataset.dest(row))
                 writer.writerow([row['pig_id'],row['capture_id'],
                                  {'keep':'保留','reject':'淘汰','unsure':'待定','pending':'未筛选'}.get(m.get('decision','pending')),
-                                 m['status'],m.get('notes',''),row['source_dir'],str(Path(output)/row['relative_dir'] if output else dataset.dest(row)),
-                                 'RGB' if dataset.input_mode=='rgb' else '红外'])
+                                 '分割失败' if failure else m['status'],m.get('notes',''),
+                                 str(dataset.source/row['relative_dir']),dest,
+                                 'RGB' if dataset.input_mode=='rgb' else '红外',
+                                 self.camera_label(row),row['relative_dir'],failure['error'] if failure else '',
+                                 {'left':'左侧','right':'右侧','up':'上侧','down':'下侧'}.get(
+                                     m.get('head_side',row.get('head_side')),'尚未记录')])
             return ('\ufeff'+result.getvalue()).encode('utf-8')

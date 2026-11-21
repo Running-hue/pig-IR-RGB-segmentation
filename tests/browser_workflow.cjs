@@ -48,7 +48,7 @@ const assert=require('assert');
     await page.locator('#keepResult').click();
     await page.waitForFunction(()=>state.meta.decision==='keep'&&!state.busy);
     await page.locator('#filter').selectOption('all');
-    await page.locator('#head').selectOption('left');
+    await page.locator('#head input[value=left]').check();
     await page.locator('#approve').click();
     await page.waitForFunction(()=>state.meta.reviewed&&!state.busy);
     assert(fs.existsSync(path.join(dest,rel,'trunk_mask.png')));

@@ -20,6 +20,17 @@ const path=require('node:path');
     const csv=await page.locator('#csvExport').getAttribute('href');
     assert(csv.includes('dataset_id='));
     assert((await page.request.get(new URL(csv,page.url()).href)).ok());
+    // Opening results must leave the loading state before entering review.
+    // Mock only this POST so no settings or dataset files are changed.
+    const openedWorkspace=await (await page.request.get(new URL('/api/captures',page.url()).href)).json();
+    await page.route('**/api/open_results',route=>route.fulfill({json:openedWorkspace}));
+    await page.locator('#openResults').click();
+    await page.locator('#resultFolder').fill(openedWorkspace.output);
+    await page.locator('#resultSource').fill('');
+    await page.locator('#loadResults').click();
+    await page.waitForFunction(()=>!flowBusy&&!state.busy&&state.meta&&$('workflow').hidden&&$('jobPanel').hidden);
+    assert.equal(await page.evaluate(()=>state.rows.length),openedWorkspace.frames.length);
+    await page.unroute('**/api/open_results');
     const artifacts=process.env.BROWSER_ARTIFACTS||path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
     for(const [width,height]of [[1440,900],[1423,776],[1366,768],[1280,720],[1440,640],[1280,600],[1024,768]]){
       await page.setViewportSize({width,height});
@@ -38,7 +49,7 @@ const path=require('node:path');
       assert(layout.approveBottom<=height,'Approval button below viewport');
       assert(layout.bodyWidth<=width,'Page overflows horizontally');
       assert(layout.bodyHeight<=height,'Page overflows vertically');
-      for(const id of ['keepResult','rejectResult','unsureResult','save','approve']){
+      for(const id of ['keepResult','rejectResult','unsureResult','save','autoNextPig','approve']){
         const button=page.locator('#'+id);
         if(await button.isEnabled())await button.click({trial:true});
         else assert(await page.evaluate(()=>state.meta.geometry_legacy),'Unexpected disabled control: '+id);
@@ -84,7 +95,8 @@ const path=require('node:path');
     assert(await page.locator('#jobPanel').isHidden(),'Current results also dismiss the banner');
     await page.evaluate(job=>showJob({...job,id:'layout-new-job',status:'running'}),reviewJob);
     assert(await page.locator('#jobPanel').isVisible(),'A new running task remains visible');
-    await page.evaluate(()=>{showJob(null);$('warningDetails').open=true});
+    // Approved captures may have no warnings; exercise expansion with a DOM-only fixture.
+    await page.evaluate(()=>{showJob(null);readStats({...state.meta,stats:{...state.meta.stats,warnings:['布局测试提醒']}});$('warningDetails').open=true});
     assert(await page.locator('#warn').isVisible(),'Review warnings can be expanded');
     await page.evaluate(()=>$('warningDetails').open=false);
     await page.setViewportSize({width:390,height:844});

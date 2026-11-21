@@ -43,7 +43,7 @@ try{({chromium}=require('playwright'))}catch{
       await page.mouse.down();await page.mouse.move(canvas.x+canvas.width*.92,canvas.y+canvas.height*.88);await page.mouse.up();
       await page.locator('#samPredict').click();
       await page.waitForFunction(()=>state.samPredictionId&&!state.busy,null,{timeout:120000});
-      await page.locator('#head').selectOption('left');await page.locator('#save').click();
+      await page.locator('#head input[value=left]').check();await page.locator('#save').click();
       await page.waitForFunction(()=>!state.dirty&&!state.busy&&state.meta.status==='corrected');
       await page.locator('#keepResult').click();await page.waitForFunction(()=>state.meta.decision==='keep'&&!state.busy);
       for(const [width,height] of [[1366,768],[1280,720],[1024,768]]){
