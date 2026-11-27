@@ -1,0 +1,76 @@
+const {chromium}=require('/Users/mugua-zhaojiangtao/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+
+(async()=>{
+  const root=process.argv[2];assert(root,'Pass synthetic fixture root');
+  const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-sandbox']});
+  try{
+    const page=await browser.newPage({viewport:{width:1280,height:720}}),errors=[],pickerCalls=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    const destination=path.join(root,'导出 位置');
+    // Exercise frontend response handling without opening OS dialogs during automation.
+    let nextSelection=path.join(root,'原始 数据');
+    await page.route('**/api/choose_directory',route=>{
+      pickerCalls.push(route.request().postDataJSON());
+      return route.fulfill({json:{cancelled:nextSelection===null,path:nextSelection}});
+    });
+    await page.goto('http://127.0.0.1:8792');
+    await page.waitForFunction(()=>state.meta&&!state.busy);
+    await page.locator('#newBatch').click();
+    await page.locator('#chooseSource').click();
+    await page.waitForFunction(()=>!directorySelecting);
+    assert.equal(await page.locator('#batchSource').inputValue(),nextSelection);
+    nextSelection=null;
+    await page.locator('#chooseSource').click();await page.waitForFunction(()=>!directorySelecting);
+    assert.equal(await page.locator('#batchSource').inputValue(),path.join(root,'原始 数据'));
+    nextSelection=destination;
+    await page.locator('#chooseParent').click();await page.waitForFunction(()=>!directorySelecting);
+    assert.equal(await page.locator('#batchParent').inputValue(),destination);
+    await page.locator('#openResults').click();nextSelection=path.join(root,'成果');
+    await page.locator('#chooseResults').click();await page.waitForFunction(()=>!directorySelecting);
+    assert.equal(await page.locator('#resultFolder').inputValue(),nextSelection);
+    nextSelection=path.join(root,'原始 数据');
+    await page.locator('#chooseRelocated').click();await page.waitForFunction(()=>!directorySelecting);
+    assert.equal(await page.locator('#resultSource').inputValue(),nextSelection);
+    await page.locator('#flowOpenResults').click();
+    await page.locator('#notes').fill('未保存修改');
+    await page.locator('#exportOpen').click();
+    assert.equal(await page.locator('#exportDialog').isVisible(),false);
+    assert((await page.locator('#message').innerText()).includes('未保存'));
+    await page.locator('#save').click();await page.waitForFunction(()=>!state.busy&&!state.dirty);
+    await page.locator('#exportOpen').click();
+    assert.equal(await page.locator('#exportScope').inputValue(),'keep');
+    assert((await page.locator('#exportSummary').innerText()).includes('1 次采集'));
+    await page.locator('#exportScope').selectOption('keep_reviewed');
+    assert(await page.locator('#exportStart').isDisabled());
+    await page.locator('#exportScope').selectOption('all');
+    assert((await page.locator('#exportSummary').innerText()).includes('2 次采集'));
+    await page.locator('#exportScope').selectOption('keep');
+    nextSelection=destination;
+    await page.locator('#chooseExportParent').click();await page.waitForFunction(()=>!directorySelecting);
+    assert.equal(await page.locator('#exportParent').inputValue(),destination);
+    await page.locator('#exportName').fill('保留成果');
+    await page.locator('#exportStart').click();
+    await page.waitForFunction(()=>currentExport?.status==='completed');
+    const target=path.join(destination,'保留成果');
+    const manifest=JSON.parse(fs.readFileSync(path.join(target,'dataset.json')));
+    assert.equal(manifest.frames.length,1);
+    const frame=path.join(target,manifest.frames[0].relative_dir);
+    assert(fs.existsSync(path.join(frame,'trunk_mask_working.png')));
+    assert(fs.existsSync(path.join(frame,'revisions','00002','mask.png')));
+    assert(fs.readFileSync(path.join(target,'筛选记录.csv'),'utf8').includes('保留'));
+    const artifacts=path.join(__dirname,'..','artifacts');fs.mkdirSync(artifacts,{recursive:true});
+    await page.screenshot({path:path.join(artifacts,'export_dialog.png')});
+    await page.locator('#exportStart').click();
+    await page.waitForFunction(()=>document.getElementById('exportMessage').textContent.includes('已存在'));
+    await page.locator('#exportClose').click();
+    await page.locator('#openResults').click();await page.locator('#resultFolder').fill(target);
+    await page.locator('#loadResults').click();
+    await page.waitForFunction(()=>state.rows.length===1&&!state.busy);
+    assert.equal(await page.locator('#decisionState').innerText(),'已保留');
+    assert.equal(pickerCalls.length,6);assert.deepEqual(errors,[]);
+    console.log('PASS: all five native picker buttons, cancel, unsaved edits, export scopes, saved revisions, duplicate protection, reopen');
+  }finally{await browser.close()}
+})().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>猪体分割工作台</title>
+<meta name="app-token" content="__TOKEN__">
+<link rel="stylesheet" href="/styles.css">
+<header><div class="headerIdentity"><h1>猪体分割与复核</h1><div id="source" class="muted path">选择原始目录开始分割，或打开已有成果</div></div><div class="headerActions"><button id="newBatch">新建分割任务</button><button id="openResults">打开成果目录</button><button id="reviewCurrent" hidden>查看当前成果</button><button id="recordsOpen" hidden>分割记录</button><button id="exportOpen" hidden>导出筛选成果</button><a id="csvExport" download="分割成果筛选记录.csv" hidden>下载筛选记录 CSV</a><div id="counts" class="muted"></div></div></header>
+<section id="workflow">
+<div id="currentDataset" hidden></div>
+<div id="newBatchForm"><h2>从原始数据开始分割</h2><small>选择 iToF、双目或包含多种相机的原始目录和成果保存位置。模型在本机运行，完成后进入成果复核。</small>
+<div class="workflowGrid">
+<label>原始数据目录<div class="folderField"><input id="batchSource" placeholder="选择包含猪只采集的文件夹"><button id="chooseSource">选择文件夹</button></div></label>
+<label>成果保存到<div class="folderField"><input id="batchParent" placeholder="选择成果存放位置"><button id="chooseParent">选择文件夹</button></div></label>
+<label>分割输入<select id="batchInputMode"><option value="infrared">红外图分割（原始深度坐标）</option><option value="rgb">RGB 图像分割（匹配对齐深度）</option></select><small id="inputModeHint">使用红外图生成掩码，复核时显示红外底图。</small></label>
+<label>新建成果文件夹名<input id="batchName" placeholder="例如：itof_SAM2_本次分割"></label>
+<div class="hint">模型：SAM 2.1 Base Plus<br>自动初稿需要复核头耳尾腿、遮挡和出画位置。</div>
+<div class="flowActions"><button id="scanSource">检查数据</button><button id="startBatch" class="primary">开始分割</button><span id="scanResult" class="muted"></span><button id="flowClose" hidden>返回复核</button></div>
+</div></div>
+<div id="openResultsForm" hidden><h2>打开已有分割成果</h2><small>选择含有 dataset.json 的成果根目录。筛选记录、修正和确认状态随该目录保存。</small>
+<div class="workflowGrid"><label>分割成果目录<div class="folderField"><input id="resultFolder" placeholder="选择此前保存的成果文件夹"><button id="chooseResults">选择文件夹</button></div></label>
+<label>原始目录已移动时，填写新位置（可选）<div class="folderField"><input id="resultSource" placeholder="通常无需填写"><button id="chooseRelocated">选择</button></div></label>
+<div class="flowActions"><button id="loadResults" class="primary">载入成果并复核</button><button id="flowOpenResults">返回当前成果</button></div></div></div>
+<div id="flowMessage" role="status"></div>
+</section>
+<section id="jobPanel" hidden><div class="jobLine"><div id="jobText"></div><div class="headerActions"><button id="stopBatch">停止任务</button><button id="enterReview" class="primary" hidden>进入成果复核</button></div></div><progress id="jobProgress" max="1" value="0"></progress><details id="jobErrorDetails" hidden><summary>查看失败记录</summary><div id="jobErrors"></div></details></section>
+<div id="emptyHint"><h2>先选择一个文件夹</h2><p>新数据点击“新建分割任务”；已有分割结果点击“打开成果目录”。</p></div>
+<div class="shell" id="editor" hidden>
+<aside class="left"><input id="search" placeholder="搜索耳标或拍摄时间" aria-label="搜索采集"><div id="cameraTabs" role="group" aria-label="相机筛选"><button data-camera="all" class="active">全部</button><button data-camera="itof">iToF</button><button data-camera="stereo">双目</button><button data-camera="unknown" hidden>未识别</button></div><select id="filter" aria-label="筛选状态"><option value="all">全部采集</option><option value="decision:pending">未筛选</option><option value="decision:keep">已保留</option><option value="decision:reject">已淘汰</option><option value="decision:unsure">待定</option><option value="draft">待复核初稿</option><option value="corrected">已修正，待确认</option><option value="reviewed">已确认合格</option><option value="pending">未生成</option><option value="failed">分割失败</option></select><div id="reviewProgress"><div class="progressLine"><span>分割进度</span><span id="segProgressText"></span></div><progress id="segProgress" value="0" max="1"></progress><small id="segProgressDetail"></small><div class="progressLine"><span>掩码复核</span><span id="maskProgressText"></span></div><progress id="maskProgress" value="0" max="1"></progress><small id="visibleCount"></small></div><div id="list"></div><small>筛选记录保存在当前成果目录；原始数据只读。</small></aside>
+<main>
+<div class="caption"><div class="captureIdentity"><div id="title">选择一张底图</div><small id="capture"></small></div><div><small id="reviewInputMode"></small> <button id="prev">上一张</button> <button id="next">下一张</button></div></div>
+<div class="toolbar" id="tools"><button data-tool="brush" class="active">补画 B</button><button data-tool="erase">擦除 E</button><button data-tool="polyAdd">多边形补画</button><button data-tool="polyErase">多边形擦除</button><button id="finishPoly">闭合轮廓 ↵</button><button id="undo">撤销</button><button id="redo">重做</button></div>
+<div class="toolbar" id="samTools"><strong>SAM 2.1</strong><button data-tool="samPositive">目标点 ＋</button><button data-tool="samNegative">背景点 −</button><button data-tool="samBox">框选目标</button><button id="samPredict" class="primary">运行 SAM</button><button id="samClear">清空提示</button><small id="samPromptCount">先在猪体内部点一下</small></div>
+<div class="toolbar viewToolbar"><button data-view="overlay" class="active">叠加预览</button><button data-view="original">红外原图</button><button data-view="binary">二值掩码</button><label class="inline">笔刷 <input id="brush" type="range" min="2" max="90" value="20" aria-label="笔刷直径"><span id="brushLabel">20</span></label><label class="inline">叠加 <input id="opacity" type="range" min="5" max="85" value="40" aria-label="叠加透明度"></label><select id="zoom" aria-label="画布缩放"><option value="fit">适应窗口</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></div>
+<div id="viewport"><div id="stage"><canvas id="base" width="640" height="576"></canvas><canvas id="paint" width="640" height="576"></canvas><canvas id="mask" width="640" height="576"></canvas></div></div>
+<small id="geometryNote" role="status"></small>
+<div id="message" role="status">鼠标拖动补画或擦除；多边形点击添加顶点，回车闭合，Esc 取消。</div>
+</main>
+<aside class="right">
+<section class="reviewSection"><div class="sectionHeading"><div class="sectionTitle">辅助查看</div></div>
+<details class="reviewHelp"><summary>躯干标注说明</summary><div class="hint">目标是<strong>可见躯干</strong>。去掉头、耳、尾、腿和背景；遮挡处沿可见边界描画，不补出被挡住的身体。<span id="inputReviewHint">当前在红外底图上修正掩码，RGB 仅作部位参考。</span></div></details>
+<div class="preview"><button id="rgbBtn" title="放大 RGB 参考图"><img id="rgb" alt="RGB 参考"><small id="referenceLabel">RGB 参考 ↗</small></button><button id="depthBtn" title="放大深度预览"><img id="depth" alt="深度预览"><small id="depthLabel">深度预览 ↗</small></button></div></section>
+<section class="reviewSection"><div class="sectionTitle">当前结果</div><div id="stats">—</div><details id="warningDetails" class="reviewWarnings" hidden><summary id="warningSummary">复核提醒</summary><div id="warn"></div></details></section>
+<label class="headField">图中的头侧方向<select id="head"><option value="unknown">尚未记录</option><option value="left">左侧</option><option value="right">右侧</option><option value="up">上侧</option><option value="down">下侧</option></select></label>
+<label>备注<textarea id="notes" placeholder="如：尾根待修、左侧被栏杆遮挡"></textarea></label>
+<section class="reviewSection"><div class="sectionHeading"><div class="sectionTitle">成果筛选</div><div id="decisionState">未筛选</div></div><div class="decisionButtons"><button id="keepResult">保留</button><button id="rejectResult">淘汰</button><button id="unsureResult">待定</button></div><small class="decisionHelp">淘汰请写备注；筛选与掩码确认分别记录。</small></section>
+<div class="restoreActions"><button id="restore">恢复自动初稿到画布</button><button id="generate">生成 GrabCut 初稿</button></div>
+<div class="saveGroup"><small>确认前检查躯干边界、头尾截断与复核提醒。</small><button id="save">保存修正，稍后确认</button><label class="autoNextField"><input id="autoNext" type="checkbox">确认保存后自动切换下一张</label><button id="approve" class="primary">确认合格并保存</button></div>
+</aside></div>
+<dialog id="previewDialog"><button id="closePreview" style="float:right">关闭</button><img id="largePreview" alt="放大参考图"></dialog>
+<dialog id="exportDialog"><div class="caption"><strong>导出筛选后的分割成果</strong><button id="exportClose">关闭</button></div>
+<div class="exportFields">
+<label>导出范围<select id="exportScope"><option value="keep">已保留</option><option value="keep_reviewed">已保留且掩码已确认</option><option value="reject">已淘汰</option><option value="unsure">待定</option><option value="pending">未筛选（已分割）</option><option value="all">全部已分割</option></select></label>
+<div id="exportSummary"></div>
+<label>导出到<div class="folderField"><input id="exportParent" placeholder="选择导出成果的保存位置"><button id="chooseExportParent">选择文件夹</button></div></label>
+<label>新建导出文件夹名<input id="exportName" placeholder="例如：itof_筛选保留_20261118"></label>
+</div><small>复制所选采集的掩码、叠加图、复核记录及修订历史，并生成筛选 CSV，同时附带全批次分割失败记录（含已补充分割的历史）。CSV 会注明实际导出的成果。导出目录可重新打开复核；原始红外、深度和 RGB 仍从原始目录读取。导出期间暂停编辑。</small>
+<div id="exportProgress" role="status"></div><div id="exportMessage" role="alert"></div><div class="exportActions"><button id="exportStart" class="primary">开始导出</button></div></dialog>
+<dialog id="recordsDialog"><div class="caption"><strong>分割记录</strong><button id="recordsClose">关闭</button></div><div class="recordsToolbar"><select id="recordsFilter" aria-label="分割记录范围"><option value="all">全部记录</option><option value="failed">仅未解决失败</option><option value="history">全部失败历史</option></select><small id="recordsSummary"></small><a id="recordsCsv" download="分割成果筛选记录.csv">下载记录 CSV（含失败原因）</a></div><div class="recordsTable"><table><thead><tr><th>相机</th><th>耳标／采集</th><th>状态</th><th>失败原因／历史</th></tr></thead><tbody id="recordsBody"></tbody></table></div><small>导出筛选成果会附带全批次失败清单；已补充分割的历史仍会保留。</small></dialog><dialog id="directoryDialog"><div class="caption"><strong id="directoryTitle">选择文件夹</strong><button id="directoryCancel">关闭</button></div><div class="folderField" style="margin-top:14px"><input id="directoryPath" aria-label="文件夹路径" placeholder="粘贴完整路径，或逐级打开文件夹"><button id="directoryGo">前往</button><button id="directoryUp">上一级</button></div><div id="directoryInfo"></div><div id="directoryError" role="alert"></div><div id="directoryList"></div><button id="directoryUse" class="primary">使用此文件夹</button></dialog>
+<script src="/editor.js"></script>
+<script src="/workflow.js"></script>
+</html>

@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 set "task_python=%CD%\.venv\Scripts\python.exe"
 if not exist "%task_python%" (
-    echo Please create .venv and install requirements-sam.txt first. See DEPLOYMENT.md.
+    echo Please create .venv and install config/requirements-sam.txt first. See docs/DEPLOYMENT.md.
     pause
     exit /b 1
 )
